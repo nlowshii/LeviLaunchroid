@@ -5,12 +5,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.net.Uri;
 import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -38,8 +41,8 @@ final class PojavControlOverlay extends ViewGroup {
     private boolean virtualMouse;
     private float virtualCursorX = Float.NaN;
     private float virtualCursorY = Float.NaN;
-    private boolean virtualTouchDown;
-    private long virtualTouchDownAt;
+    private boolean virtualPrimaryDown;
+    private boolean virtualSecondaryDown;
     private boolean receiverRegistered;
 
     private final BroadcastReceiver profileReceiver = new BroadcastReceiver() {
@@ -81,7 +84,9 @@ final class PojavControlOverlay extends ViewGroup {
             addView(joystick);
         }
         for (ControlDrawerData data : profile.mDrawerDataList) addDrawer(data);
+        cursorView.configure(profile.virtualMouseImageUri, profile.virtualMouseScale);
         addView(cursorView);
+        clampVirtualCursor();
         cursorView.setVisibility(virtualMouse ? VISIBLE : GONE);
         updateVirtualMouseButtons();
         requestLayout();
@@ -92,7 +97,7 @@ final class PojavControlOverlay extends ViewGroup {
         for (RuntimeButton button : buttons) button.release();
         for (RuntimeJoystick joystick : joysticks) joystick.release();
         runtimeSurface.release();
-        releaseVirtualTouch();
+        releaseVirtualMouseButtons();
     }
 
     void dispose() {
@@ -120,7 +125,8 @@ final class PojavControlOverlay extends ViewGroup {
                 continue;
             }
             if (child == cursorView) {
-                int cursorSize = Math.round(36 * density);
+                float scale = profile == null ? 1f : profile.virtualMouseScale;
+                int cursorSize = Math.max(8, Math.round(36 * density * scale));
                 child.measure(MeasureSpec.makeMeasureSpec(cursorSize, MeasureSpec.EXACTLY),
                         MeasureSpec.makeMeasureSpec(cursorSize, MeasureSpec.EXACTLY));
                 continue;
@@ -182,7 +188,7 @@ final class PojavControlOverlay extends ViewGroup {
     private void setVirtualMouse(boolean enabled) {
         if (virtualMouse == enabled) return;
         runtimeSurface.release();
-        releaseVirtualTouch();
+        releaseVirtualMouseButtons();
         virtualMouse = enabled;
         if (enabled) {
             if (Float.isNaN(virtualCursorX) || Float.isNaN(virtualCursorY)) {
@@ -190,6 +196,7 @@ final class PojavControlOverlay extends ViewGroup {
                 virtualCursorY = getHeight() / 2f;
             }
             clampVirtualCursor();
+            host.pojavSendPointer(virtualCursorX, virtualCursorY);
         }
         cursorView.setVisibility(enabled ? VISIBLE : GONE);
         updateVirtualMouseButtons();
@@ -203,11 +210,22 @@ final class PojavControlOverlay extends ViewGroup {
         }
         virtualCursorX += deltaX;
         virtualCursorY += deltaY;
+        updateVirtualCursorPosition();
+    }
+
+    private void moveVirtualCursorTo(float x, float y) {
+        virtualCursorX = x;
+        virtualCursorY = y;
+        updateVirtualCursorPosition();
+    }
+
+    private void updateVirtualCursorPosition() {
         clampVirtualCursor();
         int x = Math.round(virtualCursorX);
         int y = Math.round(virtualCursorY);
         cursorView.layout(x, y, x + cursorView.getMeasuredWidth(), y + cursorView.getMeasuredHeight());
         cursorView.invalidate();
+        host.pojavSendPointer(virtualCursorX, virtualCursorY);
     }
 
     private void clampVirtualCursor() {
@@ -239,14 +257,21 @@ final class PojavControlOverlay extends ViewGroup {
             int actionIndex = event.getActionIndex();
             if (!virtualMouse) {
                 host.pojavSendTouch(event);
-                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) release();
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    release();
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+                }
                 return true;
             }
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+                if (action == MotionEvent.ACTION_DOWN) {
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                }
                 if (cameraPointer == -1) {
                     cameraPointer = event.getPointerId(actionIndex);
                     cameraX = event.getX(actionIndex);
                     cameraY = event.getY(actionIndex);
+                    if (host.pojavIsMenuOpen()) moveVirtualCursorTo(cameraX, cameraY);
                     cameraDownX = cameraX;
                     cameraDownY = cameraY;
                     cameraDownAt = SystemClock.uptimeMillis();
@@ -265,7 +290,14 @@ final class PojavControlOverlay extends ViewGroup {
                     if (downDeltaX * downDeltaX + downDeltaY * downDeltaY > threshold * threshold) {
                         cameraMoved = true;
                     }
-                    moveVirtualCursor(x - cameraX, y - cameraY);
+                    float deltaX = x - cameraX;
+                    float deltaY = y - cameraY;
+                    if (host.pojavIsMenuOpen()) {
+                        moveVirtualCursor(deltaX, deltaY);
+                    } else {
+                        float sensitivity = cameraSensitivity();
+                        host.pojavSendLookDelta(deltaX * sensitivity, deltaY * sensitivity);
+                    }
                     cameraX = x;
                     cameraY = y;
                 }
@@ -274,11 +306,12 @@ final class PojavControlOverlay extends ViewGroup {
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL ||
                     (action == MotionEvent.ACTION_POINTER_UP &&
                             event.getPointerId(actionIndex) == cameraPointer)) {
-                if (action != MotionEvent.ACTION_CANCEL && !cameraMoved) {
-                    long elapsed = SystemClock.uptimeMillis() - cameraDownAt;
-                    if (elapsed < 200L) sendVirtualTouchTap(event.getEventTime());
-                }
+                    if (action != MotionEvent.ACTION_CANCEL && !cameraMoved && host.pojavIsMenuOpen()) {
+                        long elapsed = SystemClock.uptimeMillis() - cameraDownAt;
+                        if (elapsed < 350L) sendVirtualMouseClick();
+                    }
                 release();
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
                 return true;
             }
             return true;
@@ -290,36 +323,27 @@ final class PojavControlOverlay extends ViewGroup {
         }
     }
 
-    private void sendVirtualTouchTap(long eventTime) {
-        sendVirtualTouch(MotionEvent.ACTION_DOWN, eventTime, eventTime);
-        sendVirtualTouch(MotionEvent.ACTION_UP, eventTime, eventTime + 10L);
+    private void sendVirtualMouseClick() {
+        host.pojavSendPointer(virtualCursorX, virtualCursorY);
+        host.pojavSendMouseButton(MotionEvent.BUTTON_PRIMARY, true);
+        host.pojavSendMouseButton(MotionEvent.BUTTON_PRIMARY, false);
     }
 
-    private void setVirtualTouchPressed(boolean down) {
-        long now = SystemClock.uptimeMillis();
-        if (down) {
-            if (virtualTouchDown) return;
-            virtualTouchDown = true;
-            virtualTouchDownAt = now;
-            sendVirtualTouch(MotionEvent.ACTION_DOWN, now, now);
-        } else {
-            releaseVirtualTouch();
+    private void setVirtualMouseButton(int androidButton, boolean down) {
+        if (androidButton == MotionEvent.BUTTON_PRIMARY) {
+            if (virtualPrimaryDown == down) return;
+            virtualPrimaryDown = down;
+        } else if (androidButton == MotionEvent.BUTTON_SECONDARY) {
+            if (virtualSecondaryDown == down) return;
+            virtualSecondaryDown = down;
         }
+        host.pojavSendPointer(virtualCursorX, virtualCursorY);
+        host.pojavSendMouseButton(androidButton, down);
     }
 
-    private void releaseVirtualTouch() {
-        if (!virtualTouchDown) return;
-        long now = SystemClock.uptimeMillis();
-        sendVirtualTouch(MotionEvent.ACTION_UP, virtualTouchDownAt, now);
-        virtualTouchDown = false;
-    }
-
-    private void sendVirtualTouch(int action, long downTime, long eventTime) {
-        MotionEvent event = MotionEvent.obtain(downTime, eventTime, action,
-                virtualCursorX, virtualCursorY, 0);
-        event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
-        host.pojavSendTouch(event);
-        event.recycle();
+    private void releaseVirtualMouseButtons() {
+        if (virtualPrimaryDown) setVirtualMouseButton(MotionEvent.BUTTON_PRIMARY, false);
+        if (virtualSecondaryDown) setVirtualMouseButton(MotionEvent.BUTTON_SECONDARY, false);
     }
 
     private void addRuntimeButton(ControlData data) {
@@ -355,10 +379,10 @@ final class PojavControlOverlay extends ViewGroup {
             updateVisibility();
         } else if (code == ControlData.SPECIALBTN_VIRTUALMOUSE && down) setVirtualMouse(!virtualMouse);
         else if (code == ControlData.SPECIALBTN_MOUSEPRI && virtualMouse) {
-            setVirtualTouchPressed(down);
+            setVirtualMouseButton(MotionEvent.BUTTON_PRIMARY, down);
         }
         else if (code == ControlData.SPECIALBTN_MOUSESEC && virtualMouse) {
-            setVirtualTouchPressed(down);
+            setVirtualMouseButton(MotionEvent.BUTTON_SECONDARY, down);
         }
         else if (code == ControlData.SPECIALBTN_MOUSEPRI) host.pojavSendMouseButton(MotionEvent.BUTTON_PRIMARY, down);
         else if (code == ControlData.SPECIALBTN_MOUSESEC) host.pojavSendMouseButton(MotionEvent.BUTTON_SECONDARY, down);
@@ -378,6 +402,7 @@ final class PojavControlOverlay extends ViewGroup {
             boolean visible = specialToggle || (controlsVisible && button.isVisibleForMode(menu));
             DrawerPlacement placement = drawerPlacements.get(button);
             if (placement != null) visible &= placement.runtime.open;
+            if (!visible) button.release();
             button.setVisibility(visible ? VISIBLE : GONE);
         }
         for (RuntimeJoystick joystick : joysticks) {
@@ -471,6 +496,7 @@ final class PojavControlOverlay extends ViewGroup {
         private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint outline = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path pointer = new Path();
+        private Bitmap customBitmap;
 
         VirtualMouseCursor(Context context) {
             super(context);
@@ -484,17 +510,38 @@ final class PojavControlOverlay extends ViewGroup {
             setFocusable(false);
         }
 
+        void configure(String imageUri, float scale) {
+            if (customBitmap != null && !customBitmap.isRecycled()) customBitmap.recycle();
+            customBitmap = null;
+            if (imageUri != null && !imageUri.isBlank()) {
+                try {
+                    Uri uri = Uri.parse(imageUri);
+                    customBitmap = BitmapFactory.decodeStream(getContext().getContentResolver().openInputStream(uri));
+                } catch (Exception ignored) {
+                    customBitmap = null;
+                }
+            }
+            requestLayout();
+            invalidate();
+        }
+
         @Override
         protected void onDraw(Canvas canvas) {
+            if (customBitmap != null && !customBitmap.isRecycled()) {
+                canvas.drawBitmap(customBitmap, null,
+                        new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                return;
+            }
             float density = getResources().getDisplayMetrics().density;
+            float factor = Math.min(getWidth(), getHeight()) / Math.max(1f, 36f * density);
             pointer.reset();
-            pointer.moveTo(2f * density, 2f * density);
-            pointer.lineTo(2f * density, 29f * density);
-            pointer.lineTo(9f * density, 22f * density);
-            pointer.lineTo(15f * density, 34f * density);
-            pointer.lineTo(21f * density, 31f * density);
-            pointer.lineTo(15f * density, 19f * density);
-            pointer.lineTo(26f * density, 18f * density);
+            pointer.moveTo(2f * density * factor, 2f * density * factor);
+            pointer.lineTo(2f * density * factor, 29f * density * factor);
+            pointer.lineTo(9f * density * factor, 22f * density * factor);
+            pointer.lineTo(15f * density * factor, 34f * density * factor);
+            pointer.lineTo(21f * density * factor, 31f * density * factor);
+            pointer.lineTo(15f * density * factor, 19f * density * factor);
+            pointer.lineTo(26f * density * factor, 18f * density * factor);
             pointer.close();
             canvas.drawPath(pointer, fill);
             canvas.drawPath(pointer, outline);
@@ -538,6 +585,9 @@ final class PojavControlOverlay extends ViewGroup {
         public boolean onTouchEvent(MotionEvent event) {
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+                if (action == MotionEvent.ACTION_DOWN) {
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                }
                 outside = false;
                 passThroughX = event.getX();
                 passThroughY = event.getY();
@@ -575,6 +625,7 @@ final class PojavControlOverlay extends ViewGroup {
                 if (!outside) performClick();
                 outside = false;
                 rawPassThrough = false;
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
                 return true;
             }
             if (action == MotionEvent.ACTION_CANCEL) {
@@ -582,6 +633,7 @@ final class PojavControlOverlay extends ViewGroup {
                 if (!data.isToggle || virtualMouseButton) press(false);
                 outside = false;
                 rawPassThrough = false;
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
                 return true;
             }
             return true;

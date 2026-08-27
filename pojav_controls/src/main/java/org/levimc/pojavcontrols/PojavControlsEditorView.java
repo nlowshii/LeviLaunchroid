@@ -3,6 +3,7 @@ package org.levimc.pojavcontrols;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
@@ -14,6 +15,7 @@ import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -29,6 +31,7 @@ import java.util.List;
 final class PojavControlsEditorView extends FrameLayout {
     static final int REQUEST_IMPORT = 4101;
     static final int REQUEST_EXPORT = 4102;
+    static final int REQUEST_CURSOR_IMAGE = 4103;
 
     private final Activity activity;
     private final Runnable closeAction;
@@ -95,6 +98,7 @@ final class PojavControlsEditorView extends FrameLayout {
         });
 
         toolbar.addView(toolbarButton(R.string.pojav_controls_profiles, view -> showProfilesDialog()));
+        toolbar.addView(toolbarButton(R.string.pojav_controls_mouse_settings, view -> showMouseSettings()));
         Button hide = toolbarButton(R.string.pojav_controls_hide_toolbar, null);
         toolbar.addView(hide);
         toolbar.addView(toolbarButton(R.string.pojav_controls_add, view -> showAddDialog()));
@@ -135,7 +139,7 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT) return false;
+        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE) return false;
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri uri = data.getData();
         try {
@@ -154,6 +158,17 @@ final class PojavControlsEditorView extends FrameLayout {
                 reloadProfileSpinner(profileName);
                 notifyProfileChanged();
                 Toast.makeText(activity, R.string.pojav_controls_imported, Toast.LENGTH_SHORT).show();
+            } else if (requestCode == REQUEST_CURSOR_IMAGE) {
+                int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+                    try {
+                        activity.getContentResolver().takePersistableUriPermission(uri, flags);
+                    } catch (SecurityException ignored) {
+                    }
+                }
+                profile.virtualMouseImageUri = uri.toString();
+                saveCurrent(false);
+                Toast.makeText(activity, R.string.pojav_controls_image_selected, Toast.LENGTH_SHORT).show();
             } else {
                 saveCurrent(false);
                 try (OutputStream output = activity.getContentResolver().openOutputStream(uri, "wt")) {
@@ -168,13 +183,95 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     private Button toolbarButton(int text, View.OnClickListener listener) {
+        float density = getResources().getDisplayMetrics().density;
         Button button = new Button(activity);
         button.setText(text);
-        button.setTextColor(Color.WHITE);
+        button.setTextColor(0xFFEAFBF3);
         button.setTextSize(12);
         button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setPadding(Math.round(12 * density), 0, Math.round(12 * density), 0);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFF2B343A);
+        background.setCornerRadius(8 * density);
+        background.setStroke(Math.max(1, Math.round(density)), 0xFF46545C);
+        button.setBackground(background);
         button.setOnClickListener(listener);
         return button;
+    }
+
+    private void showMouseSettings() {
+        float density = getResources().getDisplayMetrics().density;
+        LinearLayout form = new LinearLayout(activity);
+        form.setOrientation(LinearLayout.VERTICAL);
+        int padding = Math.round(18 * density);
+        form.setPadding(padding, padding, padding, padding);
+
+        TextView preview = new TextView(activity);
+        preview.setText(R.string.pojav_controls_mouse_preview);
+        preview.setTextColor(0xFFEAFBF3);
+        preview.setTextSize(15);
+        preview.setGravity(Gravity.CENTER);
+        preview.setBackgroundColor(0xFF283238);
+        form.addView(preview, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(58 * density)));
+
+        TextView value = new TextView(activity);
+        value.setTextColor(0xFFB8C0C8);
+        value.setGravity(Gravity.CENTER_VERTICAL);
+        form.addView(value, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(38 * density)));
+
+        SeekBar scale = new SeekBar(activity);
+        scale.setMax(180);
+        scale.setProgress(Math.round((profile.virtualMouseScale - 0.2f) * 100f));
+        form.addView(scale, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
+        Runnable updateValue = () -> value.setText(activity.getString(R.string.pojav_controls_mouse_scale)
+                + ": " + Math.round((0.2f + scale.getProgress() / 100f) * 100f) + "%");
+        scale.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { updateValue.run(); }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        updateValue.run();
+
+        Button choose = new Button(activity);
+        choose.setText(R.string.pojav_controls_choose_image);
+        choose.setAllCaps(false);
+        choose.setOnClickListener(view -> startCursorImagePick());
+        form.addView(choose);
+
+        Button clear = new Button(activity);
+        clear.setText(R.string.pojav_controls_clear_image);
+        clear.setAllCaps(false);
+        clear.setOnClickListener(view -> {
+            profile.virtualMouseImageUri = "";
+            saveCurrent(false);
+            Toast.makeText(activity, R.string.pojav_controls_image_cleared, Toast.LENGTH_SHORT).show();
+        });
+        form.addView(clear);
+
+        new AlertDialog.Builder(activity)
+                .setTitle(R.string.pojav_controls_mouse_settings)
+                .setView(form)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
+                    profile.normalize();
+                    saveCurrent(false);
+                    canvas.rebuild();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void startCursorImagePick() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(intent, REQUEST_CURSOR_IMAGE);
     }
 
     private void showAddDialog() {
