@@ -12,7 +12,8 @@ final class ExpressionEvaluator {
 
     static float evaluate(String source, Map<String, Float> variables, float fallback) {
         if (source == null) return fallback;
-        String expanded = source;
+        String expanded = source.replaceAll("px\\s*\\(\\s*([-+]?\\d*\\.?\\d+(?:[eE][-+]?\\d+)?)\\s*\\)", "($1 * DENSITY_PLACEHOLDER)")
+                .replace("DENSITY_PLACEHOLDER", "${density}");
         for (Map.Entry<String, Float> entry : variables.entrySet()) {
             expanded = expanded.replace("${" + entry.getKey() + "}", Float.toString(entry.getValue()));
         }

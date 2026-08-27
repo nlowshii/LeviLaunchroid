@@ -14,6 +14,9 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -51,6 +54,7 @@ final class PojavControlsEditorView extends FrameLayout {
         profile = repository.load(profileName);
         setClickable(true);
         setFocusable(true);
+        setBackgroundColor(Color.TRANSPARENT);
 
         canvas = new ControlEditorCanvas(activity, this::showProperties);
         canvas.setProfile(profile);
@@ -60,19 +64,25 @@ final class PojavControlsEditorView extends FrameLayout {
         HorizontalScrollView toolbarScroll = new HorizontalScrollView(activity);
         toolbarScroll.setHorizontalScrollBarEnabled(false);
         toolbarScroll.setFillViewport(true);
-        toolbarScroll.setBackgroundColor(0xE6202428);
+        GradientDrawable toolbarBackground = new GradientDrawable();
+        toolbarBackground.setColor(0xD91B2024);
+        toolbarBackground.setCornerRadius(18 * density);
+        toolbarBackground.setStroke(Math.max(1, Math.round(density)), 0x554AE0A0);
+        toolbarScroll.setBackground(toolbarBackground);
         LinearLayout toolbar = new LinearLayout(activity);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.setPadding(Math.round(8 * density), Math.round(4 * density),
-                Math.round(8 * density), Math.round(4 * density));
+        toolbar.setPadding(Math.round(12 * density), Math.round(8 * density),
+                Math.round(12 * density), Math.round(8 * density));
 
         TextView title = new TextView(activity);
         title.setText(R.string.pojav_controls_editor);
         title.setTextColor(Color.WHITE);
-        title.setTextSize(18);
+        title.setTextSize(17);
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        title.setSingleLine(true);
         title.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.addView(title, new LinearLayout.LayoutParams(Math.round(160 * density),
+        toolbar.addView(title, new LinearLayout.LayoutParams(Math.round(124 * density),
                 Math.round(48 * density)));
 
         profileSpinner = new Spinner(activity);
@@ -108,9 +118,11 @@ final class PojavControlsEditorView extends FrameLayout {
         toolbar.addView(toolbarButton(R.string.pojav_controls_close, view -> close()));
 
         toolbarScroll.addView(toolbar, new HorizontalScrollView.LayoutParams(
-                HorizontalScrollView.LayoutParams.WRAP_CONTENT, Math.round(56 * density)));
-        LayoutParams toolbarParams = new LayoutParams(LayoutParams.MATCH_PARENT, Math.round(56 * density));
+                HorizontalScrollView.LayoutParams.WRAP_CONTENT, Math.round(64 * density)));
+        LayoutParams toolbarParams = new LayoutParams(LayoutParams.MATCH_PARENT, Math.round(64 * density));
         toolbarParams.gravity = Gravity.TOP;
+        toolbarParams.setMargins(Math.round(8 * density), Math.round(8 * density),
+                Math.round(8 * density), 0);
         addView(toolbarScroll, toolbarParams);
 
         Button showToolbar = toolbarButton(R.string.pojav_controls_show_toolbar, null);
@@ -118,7 +130,7 @@ final class PojavControlsEditorView extends FrameLayout {
         showToolbar.setGravity(Gravity.CENTER);
         showToolbar.setPadding(Math.round(8 * density), 0, Math.round(8 * density), 0);
         showToolbar.setVisibility(GONE);
-        showToolbar.setBackgroundColor(0xCC202428);
+        showToolbar.setBackgroundColor(0xB0202428);
         LayoutParams showParams = new LayoutParams(Math.round(120 * density), Math.round(48 * density));
         showParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         addView(showToolbar, showParams);
@@ -188,15 +200,18 @@ final class PojavControlsEditorView extends FrameLayout {
         button.setText(text);
         button.setTextColor(0xFFEAFBF3);
         button.setTextSize(12);
+        button.setGravity(Gravity.CENTER);
         button.setAllCaps(false);
         button.setMinHeight(0);
         button.setMinWidth(0);
-        button.setPadding(Math.round(12 * density), 0, Math.round(12 * density), 0);
+        button.setPadding(Math.round(14 * density), 0, Math.round(14 * density), 0);
         GradientDrawable background = new GradientDrawable();
         background.setColor(0xFF2B343A);
         background.setCornerRadius(8 * density);
         background.setStroke(Math.max(1, Math.round(density)), 0xFF46545C);
         button.setBackground(background);
+        button.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, Math.round(44 * density)));
         button.setOnClickListener(listener);
         return button;
     }
@@ -216,6 +231,28 @@ final class PojavControlsEditorView extends FrameLayout {
         preview.setBackgroundColor(0xFF283238);
         form.addView(preview, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(58 * density)));
+
+        TextView modeLabel = new TextView(activity);
+        modeLabel.setText(R.string.pojav_controls_cursor_mode);
+        modeLabel.setTextColor(0xFFB8C0C8);
+        modeLabel.setTextSize(12);
+        modeLabel.setPadding(0, Math.round(12 * density), 0, 0);
+        form.addView(modeLabel);
+
+        RadioGroup cursorModes = new RadioGroup(activity);
+        RadioButton followFinger = new RadioButton(activity);
+        followFinger.setId(View.generateViewId());
+        followFinger.setText(R.string.pojav_controls_cursor_follow);
+        followFinger.setTextColor(0xFFEAFBF3);
+        cursorModes.addView(followFinger);
+        RadioButton relativeCursor = new RadioButton(activity);
+        relativeCursor.setId(View.generateViewId());
+        relativeCursor.setText(R.string.pojav_controls_cursor_relative);
+        relativeCursor.setTextColor(0xFFEAFBF3);
+        cursorModes.addView(relativeCursor);
+        cursorModes.check(profile.virtualMouseMode == CustomControls.CURSOR_MODE_RELATIVE
+                ? relativeCursor.getId() : followFinger.getId());
+        form.addView(cursorModes);
 
         TextView value = new TextView(activity);
         value.setTextColor(0xFFB8C0C8);
@@ -258,6 +295,8 @@ final class PojavControlsEditorView extends FrameLayout {
                 .setView(form)
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                     profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
+                    profile.virtualMouseMode = cursorModes.getCheckedRadioButtonId() == relativeCursor.getId()
+                            ? CustomControls.CURSOR_MODE_RELATIVE : CustomControls.CURSOR_MODE_FOLLOW_FINGER;
                     profile.normalize();
                     saveCurrent(false);
                     canvas.rebuild();
@@ -359,8 +398,14 @@ final class PojavControlsEditorView extends FrameLayout {
         ScrollView scroll = new ScrollView(activity);
         LinearLayout form = new LinearLayout(activity);
         form.setOrientation(LinearLayout.VERTICAL);
-        int padding = Math.round(16 * density);
+        int padding = Math.round(18 * density);
         form.setPadding(padding, padding, padding, padding);
+        GradientDrawable panelBackground = new GradientDrawable();
+        panelBackground.setColor(0xE61E2429);
+        panelBackground.setCornerRadius(22 * density);
+        panelBackground.setStroke(Math.max(1, Math.round(density)), 0x664AE0A0);
+        form.setBackground(panelBackground);
+        scroll.setBackgroundColor(Color.TRANSPARENT);
 
         EditText name = field(form, R.string.pojav_controls_name, target.data.name);
         Button mapping = new Button(activity);
@@ -376,18 +421,30 @@ final class PojavControlsEditorView extends FrameLayout {
 
         EditText x = field(form, R.string.pojav_controls_position_x, target.data.dynamicX);
         EditText y = field(form, R.string.pojav_controls_position_y, target.data.dynamicY);
-        EditText width = field(form, R.string.pojav_controls_width, Float.toString(target.data.width));
-        EditText height = field(form, R.string.pojav_controls_height, Float.toString(target.data.height));
-        EditText opacity = field(form, R.string.pojav_controls_opacity,
-                Integer.toString(Math.round(target.data.opacity * 100f)));
+        SeekBar width = slider(form, R.string.pojav_controls_width, target.data.width, 400, "dp");
+        SeekBar height = slider(form, R.string.pojav_controls_height, target.data.height, 400, "dp");
+        addLabel(form, R.string.pojav_controls_opacity);
+        SeekBar opacity = new SeekBar(activity);
+        opacity.setMax(100);
+        opacity.setProgress(Math.round(target.data.opacity * 100f));
+        form.addView(opacity, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
+        TextView opacityValue = sliderValue(form, Math.round(target.data.opacity * 100f), "%");
+        opacity.setOnSeekBarChangeListener(sliderListener(opacityValue, "%"));
         EditText background = field(form, R.string.pojav_controls_background,
                 String.format("#%08X", target.data.bgColor));
         EditText stroke = field(form, R.string.pojav_controls_stroke,
                 String.format("#%08X", target.data.strokeColor));
-        EditText strokeWidth = field(form, R.string.pojav_controls_stroke_width,
-                Float.toString(target.data.strokeWidth));
-        EditText radius = field(form, R.string.pojav_controls_corner_radius,
-                Float.toString(target.data.cornerRadius));
+        SeekBar strokeWidth = slider(form, R.string.pojav_controls_stroke_width,
+                target.data.strokeWidth, 20, "dp");
+        addLabel(form, R.string.pojav_controls_corner_radius);
+        SeekBar radius = new SeekBar(activity);
+        radius.setMax(100);
+        radius.setProgress(Math.round(target.data.cornerRadius));
+        form.addView(radius, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
+        TextView radiusValue = sliderValue(form, Math.round(target.data.cornerRadius), "%");
+        radius.setOnSeekBarChangeListener(sliderListener(radiusValue, "%"));
         CheckBox toggle = check(form, R.string.pojav_controls_toggle, target.data.isToggle);
         CheckBox swipeable = check(form, R.string.pojav_controls_swipeable, target.data.isSwipeable);
         CheckBox passThrough = check(form, R.string.pojav_controls_pass_through, target.data.passThruEnabled);
@@ -443,13 +500,13 @@ final class PojavControlsEditorView extends FrameLayout {
                     target.data.keycodes = Arrays.copyOf(selectedCodes, 1);
                     target.data.dynamicX = x.getText().toString().trim();
                     target.data.dynamicY = y.getText().toString().trim();
-                    target.data.width = number(width, target.data.width);
-                    target.data.height = number(height, target.data.height);
-                    target.data.opacity = number(opacity, target.data.opacity * 100f) / 100f;
+                    target.data.width = width.getProgress();
+                    target.data.height = height.getProgress();
+                    target.data.opacity = opacity.getProgress() / 100f;
                     target.data.bgColor = color(background, target.data.bgColor);
                     target.data.strokeColor = color(stroke, target.data.strokeColor);
-                    target.data.strokeWidth = number(strokeWidth, target.data.strokeWidth);
-                    target.data.cornerRadius = number(radius, target.data.cornerRadius);
+                    target.data.strokeWidth = strokeWidth.getProgress();
+                    target.data.cornerRadius = radius.getProgress();
                     target.data.isToggle = toggle.isChecked();
                     target.data.isSwipeable = swipeable.isChecked();
                     target.data.passThruEnabled = passThrough.isChecked();
@@ -477,6 +534,9 @@ final class PojavControlsEditorView extends FrameLayout {
             dialog.dismiss();
         });
         dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        }
     }
 
     private void showMappingDialog(int[] selectedCodes, Button mapping) {
@@ -504,6 +564,38 @@ final class PojavControlsEditorView extends FrameLayout {
                 ? KeyMapper.GLFW_KEY_UNKNOWN : keycodes[0];
         return code == KeyMapper.GLFW_KEY_UNKNOWN
                 ? activity.getString(R.string.pojav_controls_mapping) : KeyMapper.nameOf(code);
+    }
+
+    private SeekBar slider(LinearLayout form, int label, float initial, int max, String suffix) {
+        addLabel(form, label);
+        SeekBar bar = new SeekBar(activity);
+        bar.setMax(max);
+        bar.setProgress(Math.max(0, Math.min(max, Math.round(initial))));
+        form.addView(bar, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * getResources().getDisplayMetrics().density)));
+        TextView value = sliderValue(form, bar.getProgress(), suffix);
+        bar.setOnSeekBarChangeListener(sliderListener(value, suffix));
+        return bar;
+    }
+
+    private TextView sliderValue(LinearLayout form, int value, String suffix) {
+        TextView result = new TextView(activity);
+        result.setText(value + suffix);
+        result.setTextColor(0xFFB8C0C8);
+        result.setGravity(Gravity.CENTER_VERTICAL);
+        form.addView(result, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(30 * getResources().getDisplayMetrics().density)));
+        return result;
+    }
+
+    private SeekBar.OnSeekBarChangeListener sliderListener(TextView value, String suffix) {
+        return new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                value.setText(progress + suffix);
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        };
     }
 
     private EditText field(LinearLayout form, int label, String value) {

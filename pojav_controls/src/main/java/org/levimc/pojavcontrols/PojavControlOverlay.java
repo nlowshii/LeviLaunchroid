@@ -255,14 +255,6 @@ final class PojavControlOverlay extends ViewGroup {
         public boolean onTouchEvent(MotionEvent event) {
             int action = event.getActionMasked();
             int actionIndex = event.getActionIndex();
-            if (!virtualMouse) {
-                host.pojavSendTouch(event);
-                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                    release();
-                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
-                }
-                return true;
-            }
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
                 if (action == MotionEvent.ACTION_DOWN) {
                     if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
@@ -271,7 +263,9 @@ final class PojavControlOverlay extends ViewGroup {
                     cameraPointer = event.getPointerId(actionIndex);
                     cameraX = event.getX(actionIndex);
                     cameraY = event.getY(actionIndex);
-                    if (host.pojavIsMenuOpen()) moveVirtualCursorTo(cameraX, cameraY);
+                    if (host.pojavIsMenuOpen() && profile.virtualMouseMode == CustomControls.CURSOR_MODE_FOLLOW_FINGER) {
+                        moveVirtualCursorTo(cameraX, cameraY);
+                    }
                     cameraDownX = cameraX;
                     cameraDownY = cameraY;
                     cameraDownAt = SystemClock.uptimeMillis();
@@ -592,7 +586,6 @@ final class PojavControlOverlay extends ViewGroup {
                 passThroughX = event.getX();
                 passThroughY = event.getY();
                 rawPassThrough = data.passThruEnabled && host.pojavIsMenuOpen();
-                if (rawPassThrough) sendTouchToGame(event);
                 if (!data.isToggle || virtualMouseButton) press(true);
                 return true;
             }
@@ -600,12 +593,9 @@ final class PojavControlOverlay extends ViewGroup {
                 if (data.passThruEnabled) {
                     float x = event.getX();
                     float y = event.getY();
-                    if (rawPassThrough) sendTouchToGame(event);
-                    else {
-                        float sensitivity = cameraSensitivity();
-                        host.pojavSendLookDelta((x - passThroughX) * sensitivity,
-                                (y - passThroughY) * sensitivity);
-                    }
+                    float sensitivity = cameraSensitivity();
+                    host.pojavSendLookDelta((x - passThroughX) * sensitivity,
+                            (y - passThroughY) * sensitivity);
                     passThroughX = x;
                     passThroughY = y;
                 }
@@ -617,7 +607,6 @@ final class PojavControlOverlay extends ViewGroup {
                 return true;
             }
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
-                if (rawPassThrough) sendTouchToGame(event);
                 if (data.isToggle && !virtualMouseButton && !outside) {
                     toggled = !toggled;
                     press(toggled);
@@ -629,7 +618,6 @@ final class PojavControlOverlay extends ViewGroup {
                 return true;
             }
             if (action == MotionEvent.ACTION_CANCEL) {
-                if (rawPassThrough) sendTouchToGame(event);
                 if (!data.isToggle || virtualMouseButton) press(false);
                 outside = false;
                 rawPassThrough = false;
@@ -666,13 +654,6 @@ final class PojavControlOverlay extends ViewGroup {
         private float cameraSensitivity() {
             int height = getResources().getDisplayMetrics().heightPixels;
             return height > 0 ? 1.4f * 1080f / height : 1.4f;
-        }
-
-        private void sendTouchToGame(MotionEvent event) {
-            MotionEvent copy = MotionEvent.obtain(event);
-            copy.offsetLocation(getLeft(), getTop());
-            host.pojavSendTouch(copy);
-            copy.recycle();
         }
 
         private void press(boolean down) {

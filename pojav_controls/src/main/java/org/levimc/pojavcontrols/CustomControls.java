@@ -9,8 +9,11 @@ import java.util.List;
 public class CustomControls {
     public int version = 8;
     public float scaledAt = 100f;
+    public static final int CURSOR_MODE_FOLLOW_FINGER = 0;
+    public static final int CURSOR_MODE_RELATIVE = 1;
     public float virtualMouseScale = 1f;
     public String virtualMouseImageUri = "";
+    public int virtualMouseMode = CURSOR_MODE_FOLLOW_FINGER;
     public List<ControlData> mControlDataList = new ArrayList<>();
     public List<ControlDrawerData> mDrawerDataList = new ArrayList<>();
     public List<ControlJoystickData> mJoystickDataList = new ArrayList<>();
@@ -20,6 +23,7 @@ public class CustomControls {
         if (scaledAt <= 0f) scaledAt = 100f;
         virtualMouseScale = Math.max(0.2f, Math.min(2f, virtualMouseScale <= 0f ? 1f : virtualMouseScale));
         if (virtualMouseImageUri == null) virtualMouseImageUri = "";
+        if (virtualMouseMode != CURSOR_MODE_RELATIVE) virtualMouseMode = CURSOR_MODE_FOLLOW_FINGER;
         if (mControlDataList == null) mControlDataList = new ArrayList<>();
         if (mDrawerDataList == null) mDrawerDataList = new ArrayList<>();
         if (mJoystickDataList == null) mJoystickDataList = new ArrayList<>();
@@ -44,7 +48,7 @@ public class CustomControls {
                 "${margin} * 2 + ${width}", "${margin}", 80, 30));
         controls.mControlDataList.add(button("Players", KeyMapper.GLFW_KEY_TAB,
                 "${margin} * 3 + ${width} * 2", "${margin}", 80, 30));
-        controls.mControlDataList.add(button("View", KeyMapper.GLFW_KEY_F5,
+        controls.mControlDataList.add(button("View", KeyMapper.GLFW_KEY_F1 + 4,
                 "${margin}", "${height} + ${margin} * 2", 80, 30));
         controls.mControlDataList.add(button("W", KeyMapper.GLFW_KEY_W,
                 "${margin} * 2 + ${width}", "${bottom} - ${margin} * 3 - ${height} * 2", 50, 50));

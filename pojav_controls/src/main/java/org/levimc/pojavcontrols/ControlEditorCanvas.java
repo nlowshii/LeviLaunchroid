@@ -62,13 +62,13 @@ final class ControlEditorCanvas extends ViewGroup {
         this.listener = listener;
         setClipChildren(false);
         setWillNotDraw(false);
-        setBackgroundColor(0xFF101316);
+        setBackgroundColor(Color.TRANSPARENT);
         float density = getResources().getDisplayMetrics().density;
         guidePaint.setColor(0xFF4AE0A0);
         guidePaint.setStrokeWidth(Math.max(2f, density));
-        gridPaint.setColor(0x1839A0ED);
+        gridPaint.setColor(0x2639A0ED);
         gridPaint.setStrokeWidth(Math.max(1f, density));
-        hintPaint.setColor(0x99EAFBF3);
+        hintPaint.setColor(0xCCFFFFFF);
         hintPaint.setTextSize(12f * density);
         hintPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
     }
@@ -255,6 +255,7 @@ final class ControlEditorCanvas extends ViewGroup {
         values.put("screen_height", (float) screenHeight);
         values.put("margin", 8f * density);
         values.put("preferred_scale", 100f);
+        values.put("density", density);
         return Math.round(ExpressionEvaluator.evaluate(expression, values,
                 xAxis ? (screenWidth - childWidth) / 2f : (screenHeight - childHeight) / 2f));
     }

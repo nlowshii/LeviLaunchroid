@@ -13,6 +13,9 @@
     <string name="pojav_controls_image_selected">Cursor image selected</string>
     <string name="pojav_controls_image_cleared">Custom cursor image cleared</string>
     <string name="pojav_controls_mouse_preview">Mouse cursor preview</string>
+    <string name="pojav_controls_cursor_mode">Cursor movement mode</string>
+    <string name="pojav_controls_cursor_follow">Follow finger</string>
+    <string name="pojav_controls_cursor_relative">Relative cursor</string>
     <string name="pojav_controls_editor_hint">Drag a control to move it, or tap it to edit</string>
     <string name="pojav_controls_import">Import</string>
     <string name="pojav_controls_export">Export</string>
