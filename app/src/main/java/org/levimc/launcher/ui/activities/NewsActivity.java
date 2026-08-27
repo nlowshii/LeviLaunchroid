@@ -74,8 +74,6 @@ public final class NewsActivity extends BaseActivity {
         scrollToRequestedItem();
     }
 
-    @Override
-    protected void onNewsChanged() {
         if (adapter == null) return;
         NewsRepository.loadCached(this, (feed, error) -> render(feed));
     }
