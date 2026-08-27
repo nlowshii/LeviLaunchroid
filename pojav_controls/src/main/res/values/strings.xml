@@ -6,6 +6,14 @@
     <string name="pojav_controls_profiles">Profiles</string>
     <string name="pojav_controls_hide_toolbar">Hide toolbar</string>
     <string name="pojav_controls_show_toolbar">Show toolbar</string>
+    <string name="pojav_controls_mouse_settings">Mouse settings</string>
+    <string name="pojav_controls_mouse_scale">Mouse cursor size</string>
+    <string name="pojav_controls_choose_image">Choose cursor image</string>
+    <string name="pojav_controls_clear_image">Clear custom image</string>
+    <string name="pojav_controls_image_selected">Cursor image selected</string>
+    <string name="pojav_controls_image_cleared">Custom cursor image cleared</string>
+    <string name="pojav_controls_mouse_preview">Mouse cursor preview</string>
+    <string name="pojav_controls_editor_hint">Drag a control to move it, or tap it to edit</string>
     <string name="pojav_controls_import">Import</string>
     <string name="pojav_controls_export">Export</string>
     <string name="pojav_controls_button">Button</string>

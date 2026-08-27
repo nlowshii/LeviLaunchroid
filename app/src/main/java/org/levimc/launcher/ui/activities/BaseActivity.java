@@ -1,9 +1,7 @@
 package org.levimc.launcher.ui.activities;
 
 import android.content.Context;
-import android.content.BroadcastReceiver;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -28,14 +26,10 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.core.widget.TextViewCompat;
 
 import org.levimc.launcher.R;
 import org.levimc.launcher.core.auth.MsftAccountStore;
-import org.levimc.launcher.core.news.NewsFeed;
-import org.levimc.launcher.core.news.NewsRepository;
-import org.levimc.launcher.core.news.NewsState;
 import org.levimc.launcher.ui.animation.DynamicAnim;
 import org.levimc.launcher.util.AccountTextUtils;
 import org.levimc.launcher.util.PersonalizationManager;
@@ -56,14 +50,6 @@ public class BaseActivity extends AppCompatActivity {
     private final OkHttpClient navAvatarClient = new OkHttpClient();
     private final ExecutorService navAccountExecutor = Executors.newSingleThreadExecutor();
     private ActivityResultLauncher<Intent> navAccountLoginLauncher;
-    private boolean newsReceiverRegistered;
-    private final BroadcastReceiver newsReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            refreshNewsBadge();
-            onNewsChanged();
-        }
-    };
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -210,16 +196,6 @@ public class BaseActivity extends AppCompatActivity {
             DynamicAnim.applyPressScale(avatarContainer);
         }
 
-        View news = findViewById(R.id.nav_news_container);
-        if (news != null) {
-            news.setOnClickListener(v -> {
-                if (!(this instanceof NewsActivity)) {
-                    startActivity(new Intent(this, NewsActivity.class));
-                }
-            });
-            DynamicAnim.applyPressScale(news);
-        }
-
         findViewById(R.id.nav_tab_launch).setOnClickListener(v -> {
             if (!(this instanceof MainActivity)) {
                 Intent intent = new Intent(this, MainActivity.class);
@@ -244,29 +220,6 @@ public class BaseActivity extends AppCompatActivity {
         });
 
         refreshNavAccountUI();
-        refreshNewsBadge();
-    }
-
-    private void refreshNewsBadge() {
-        if (!navBarInjected) return;
-        NewsRepository.loadCached(this, (feed, error) -> applyNewsBadge(feed));
-        NewsRepository.refreshIfStale(this, (feed, error) -> applyNewsBadge(feed));
-    }
-
-    private void applyNewsBadge(NewsFeed feed) {
-        if (isFinishing() || isDestroyed()) return;
-        int unread = NewsState.getUnreadCount(this, feed);
-        View badge = findViewById(R.id.nav_news_badge);
-        View container = findViewById(R.id.nav_news_container);
-        if (badge != null) badge.setVisibility(unread > 0 ? View.VISIBLE : View.GONE);
-        if (container != null) {
-            container.setContentDescription(unread > 0
-                    ? getString(R.string.news_unread_description, unread)
-                    : getString(R.string.news_title));
-        }
-    }
-
-    protected void onNewsChanged() {
     }
 
     protected void refreshNavAccountUI() {
@@ -374,6 +327,7 @@ public class BaseActivity extends AppCompatActivity {
             TextView tab = findViewById(id);
             if (tab == null) continue;
             int color;
+            tab.setSelected(id == activeTabId);
             if (id == activeTabId) {
                 color = accent != 0 ? accent : getResources().getColor(R.color.on_surface, getTheme());
                 tab.setTextColor(color);
@@ -384,20 +338,6 @@ public class BaseActivity extends AppCompatActivity {
                 tab.setTypeface(tab.getTypeface(), android.graphics.Typeface.NORMAL);
             }
             TextViewCompat.setCompoundDrawableTintList(tab, ColorStateList.valueOf(color));
-        }
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (!newsReceiverRegistered) {
-            ContextCompat.registerReceiver(
-                    this,
-                    newsReceiver,
-                    new IntentFilter(NewsState.ACTION_NEWS_CHANGED),
-                    ContextCompat.RECEIVER_NOT_EXPORTED
-            );
-            newsReceiverRegistered = true;
         }
     }
 
@@ -415,16 +355,6 @@ public class BaseActivity extends AppCompatActivity {
         getDelegate().applyDayNight();
         hideSystemUI();
         refreshNavAccountUI();
-        refreshNewsBadge();
-    }
-
-    @Override
-    protected void onStop() {
-        if (newsReceiverRegistered) {
-            unregisterReceiver(newsReceiver);
-            newsReceiverRegistered = false;
-        }
-        super.onStop();
     }
 
     @Override
