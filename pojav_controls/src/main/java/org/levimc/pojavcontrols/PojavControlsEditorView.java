@@ -65,9 +65,8 @@ final class PojavControlsEditorView extends FrameLayout {
         toolbarScroll.setHorizontalScrollBarEnabled(false);
         toolbarScroll.setFillViewport(true);
         GradientDrawable toolbarBackground = new GradientDrawable();
-        toolbarBackground.setColor(0xE02B7A52);
+        toolbarBackground.setColor(0xE02F343A);
         toolbarBackground.setCornerRadius(18 * density);
-        toolbarBackground.setStroke(Math.max(1, Math.round(density)), 0x554AE0A0);
         toolbarScroll.setBackground(toolbarBackground);
         LinearLayout toolbar = new LinearLayout(activity);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
@@ -130,7 +129,7 @@ final class PojavControlsEditorView extends FrameLayout {
         showToolbar.setGravity(Gravity.CENTER);
         showToolbar.setPadding(Math.round(8 * density), 0, Math.round(8 * density), 0);
         showToolbar.setVisibility(GONE);
-        showToolbar.setBackgroundColor(0xD92B7A52);
+        showToolbar.setBackgroundColor(0xD92F343A);
         LayoutParams showParams = new LayoutParams(Math.round(120 * density), Math.round(48 * density));
         showParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         addView(showToolbar, showParams);
@@ -401,9 +400,8 @@ final class PojavControlsEditorView extends FrameLayout {
         int padding = Math.round(18 * density);
         form.setPadding(padding, padding, padding, padding);
         GradientDrawable panelBackground = new GradientDrawable();
-        panelBackground.setColor(0xE02B7A52);
+        panelBackground.setColor(0xEE2F343A);
         panelBackground.setCornerRadius(22 * density);
-        panelBackground.setStroke(Math.max(1, Math.round(density)), 0x664AE0A0);
         form.setBackground(panelBackground);
         scroll.setBackgroundColor(Color.TRANSPARENT);
 
@@ -440,6 +438,7 @@ final class PojavControlsEditorView extends FrameLayout {
         form.addView(opacity, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
         TextView opacityValue = sliderValue(form, Math.round(target.data.opacity * 100f), "%");
+        opacity.setTag(opacityValue);
         opacity.setOnSeekBarChangeListener(sliderListener(opacityValue, "%"));
         bindLiveSlider(opacity, "%", () -> {
             target.data.opacity = opacity.getProgress() / 100f;
@@ -462,6 +461,7 @@ final class PojavControlsEditorView extends FrameLayout {
         form.addView(radius, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
         TextView radiusValue = sliderValue(form, Math.round(target.data.cornerRadius), "%");
+        radius.setTag(radiusValue);
         radius.setOnSeekBarChangeListener(sliderListener(radiusValue, "%"));
         bindLiveSlider(radius, "%", () -> {
             target.data.cornerRadius = radius.getProgress();

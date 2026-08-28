@@ -331,6 +331,8 @@ final class ControlEditorCanvas extends ViewGroup {
         private void applyStyle() {
             GradientDrawable background = new GradientDrawable();
             int fill = target.type == EditorTarget.JOYSTICK ? 0x6639A0ED : target.data.bgColor;
+            background.setShape(target.data.shape == ControlData.SHAPE_CIRCLE
+                    ? GradientDrawable.OVAL : GradientDrawable.RECTANGLE);
             background.setColor(fill);
             float density = getResources().getDisplayMetrics().density;
             float radius;
@@ -343,8 +345,6 @@ final class ControlEditorCanvas extends ViewGroup {
                 radius = Math.min(target.data.width, target.data.height) * density * target.data.cornerRadius / 200f;
             }
             background.setCornerRadius(radius);
-            background.setStroke(Math.max(2, Math.round(Math.max(1f, target.data.strokeWidth) * density)),
-                    0xFF4AE0A0);
             setBackground(background);
             setAlpha(Math.max(0.25f, target.data.opacity));
         }
