@@ -15,6 +15,10 @@ public class ControlData {
     public static final int SPECIALBTN_SCROLLUP = -7;
     public static final int SPECIALBTN_SCROLLDOWN = -8;
     public static final int SPECIALBTN_MENU = -9;
+    public static final int SHAPE_ROUNDED = 0;
+    public static final int SHAPE_PILL = 1;
+    public static final int SHAPE_SQUARE = 2;
+    public static final int SHAPE_CIRCLE = 3;
 
     public transient boolean isHideable;
     public String dynamicX;
@@ -28,6 +32,7 @@ public class ControlData {
     public int strokeColor;
     public float strokeWidth;
     public float cornerRadius;
+    public int shape = SHAPE_ROUNDED;
     public boolean isSwipeable;
     public boolean displayInGame;
     public boolean displayInMenu;
@@ -69,6 +74,7 @@ public class ControlData {
         strokeColor = source.strokeColor;
         strokeWidth = source.strokeWidth;
         cornerRadius = source.cornerRadius;
+        shape = source.shape;
         isSwipeable = source.isSwipeable;
         displayInGame = source.displayInGame;
         displayInMenu = source.displayInMenu;
@@ -86,6 +92,7 @@ public class ControlData {
         opacity = Math.max(0f, Math.min(opacity, 1f));
         strokeWidth = Math.max(0f, Math.min(strokeWidth, 20f));
         cornerRadius = Math.max(0f, Math.min(cornerRadius, 100f));
+        shape = Math.max(SHAPE_ROUNDED, Math.min(SHAPE_CIRCLE, shape));
     }
 
     private static int[] inflateKeycodes(int[] source) {

@@ -333,8 +333,15 @@ final class ControlEditorCanvas extends ViewGroup {
             int fill = target.type == EditorTarget.JOYSTICK ? 0x6639A0ED : target.data.bgColor;
             background.setColor(fill);
             float density = getResources().getDisplayMetrics().density;
-            float radius = target.type == EditorTarget.JOYSTICK ? target.data.width * density / 2f
-                    : Math.min(target.data.width, target.data.height) * density * target.data.cornerRadius / 200f;
+            float radius;
+            if (target.type == EditorTarget.JOYSTICK || target.data.shape == ControlData.SHAPE_CIRCLE ||
+                    target.data.shape == ControlData.SHAPE_PILL) {
+                radius = Math.min(target.data.width, target.data.height) * density / 2f;
+            } else if (target.data.shape == ControlData.SHAPE_SQUARE) {
+                radius = 0f;
+            } else {
+                radius = Math.min(target.data.width, target.data.height) * density * target.data.cornerRadius / 200f;
+            }
             background.setCornerRadius(radius);
             background.setStroke(Math.max(2, Math.round(Math.max(1f, target.data.strokeWidth) * density)),
                     0xFF4AE0A0);

@@ -681,8 +681,15 @@ final class PojavControlOverlay extends ViewGroup {
         private void applyStyle() {
             GradientDrawable background = new GradientDrawable();
             background.setColor(data.bgColor);
-            float radius = Math.min(data.width, data.height) * getResources().getDisplayMetrics().density
-                    * data.cornerRadius / 200f;
+            float density = getResources().getDisplayMetrics().density;
+            float radius;
+            if (data.shape == ControlData.SHAPE_PILL || data.shape == ControlData.SHAPE_CIRCLE) {
+                radius = Math.min(data.width, data.height) * density / 2f;
+            } else if (data.shape == ControlData.SHAPE_SQUARE) {
+                radius = 0f;
+            } else {
+                radius = Math.min(data.width, data.height) * density * data.cornerRadius / 200f;
+            }
             background.setCornerRadius(radius);
             if (data.strokeWidth > 0f) {
                 background.setStroke(Math.round(data.strokeWidth * getResources().getDisplayMetrics().density),

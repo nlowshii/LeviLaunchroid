@@ -38,6 +38,11 @@
     <string name="pojav_controls_stroke">Stroke ARGB</string>
     <string name="pojav_controls_stroke_width">Stroke width (dp)</string>
     <string name="pojav_controls_corner_radius">Corner radius (0–100)</string>
+    <string name="pojav_controls_shape">Button shape</string>
+    <string name="pojav_controls_shape_rounded">Rounded</string>
+    <string name="pojav_controls_shape_pill">Pill</string>
+    <string name="pojav_controls_shape_square">Square</string>
+    <string name="pojav_controls_shape_circle">Circle</string>
     <string name="pojav_controls_toggle">Toggle</string>
     <string name="pojav_controls_swipeable">Swipeable</string>
     <string name="pojav_controls_pass_through">Mouse pass-through</string>

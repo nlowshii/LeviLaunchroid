@@ -65,7 +65,7 @@ final class PojavControlsEditorView extends FrameLayout {
         toolbarScroll.setHorizontalScrollBarEnabled(false);
         toolbarScroll.setFillViewport(true);
         GradientDrawable toolbarBackground = new GradientDrawable();
-        toolbarBackground.setColor(0xD91B2024);
+        toolbarBackground.setColor(0xE02B7A52);
         toolbarBackground.setCornerRadius(18 * density);
         toolbarBackground.setStroke(Math.max(1, Math.round(density)), 0x554AE0A0);
         toolbarScroll.setBackground(toolbarBackground);
@@ -130,7 +130,7 @@ final class PojavControlsEditorView extends FrameLayout {
         showToolbar.setGravity(Gravity.CENTER);
         showToolbar.setPadding(Math.round(8 * density), 0, Math.round(8 * density), 0);
         showToolbar.setVisibility(GONE);
-        showToolbar.setBackgroundColor(0xB0202428);
+        showToolbar.setBackgroundColor(0xD92B7A52);
         LayoutParams showParams = new LayoutParams(Math.round(120 * density), Math.round(48 * density));
         showParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         addView(showToolbar, showParams);
@@ -401,7 +401,7 @@ final class PojavControlsEditorView extends FrameLayout {
         int padding = Math.round(18 * density);
         form.setPadding(padding, padding, padding, padding);
         GradientDrawable panelBackground = new GradientDrawable();
-        panelBackground.setColor(0xE61E2429);
+        panelBackground.setColor(0xE02B7A52);
         panelBackground.setCornerRadius(22 * density);
         panelBackground.setStroke(Math.max(1, Math.round(density)), 0x664AE0A0);
         form.setBackground(panelBackground);
@@ -423,6 +423,16 @@ final class PojavControlsEditorView extends FrameLayout {
         EditText y = field(form, R.string.pojav_controls_position_y, target.data.dynamicY);
         SeekBar width = slider(form, R.string.pojav_controls_width, target.data.width, 400, "dp");
         SeekBar height = slider(form, R.string.pojav_controls_height, target.data.height, 400, "dp");
+        bindLiveSlider(width, "dp", () -> {
+            target.data.width = width.getProgress();
+            target.data.normalize();
+            canvas.rebuild();
+        });
+        bindLiveSlider(height, "dp", () -> {
+            target.data.height = height.getProgress();
+            target.data.normalize();
+            canvas.rebuild();
+        });
         addLabel(form, R.string.pojav_controls_opacity);
         SeekBar opacity = new SeekBar(activity);
         opacity.setMax(100);
@@ -431,12 +441,20 @@ final class PojavControlsEditorView extends FrameLayout {
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
         TextView opacityValue = sliderValue(form, Math.round(target.data.opacity * 100f), "%");
         opacity.setOnSeekBarChangeListener(sliderListener(opacityValue, "%"));
+        bindLiveSlider(opacity, "%", () -> {
+            target.data.opacity = opacity.getProgress() / 100f;
+            canvas.rebuild();
+        });
         EditText background = field(form, R.string.pojav_controls_background,
                 String.format("#%08X", target.data.bgColor));
         EditText stroke = field(form, R.string.pojav_controls_stroke,
                 String.format("#%08X", target.data.strokeColor));
         SeekBar strokeWidth = slider(form, R.string.pojav_controls_stroke_width,
                 target.data.strokeWidth, 20, "dp");
+        bindLiveSlider(strokeWidth, "dp", () -> {
+            target.data.strokeWidth = strokeWidth.getProgress();
+            canvas.rebuild();
+        });
         addLabel(form, R.string.pojav_controls_corner_radius);
         SeekBar radius = new SeekBar(activity);
         radius.setMax(100);
@@ -445,6 +463,29 @@ final class PojavControlsEditorView extends FrameLayout {
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
         TextView radiusValue = sliderValue(form, Math.round(target.data.cornerRadius), "%");
         radius.setOnSeekBarChangeListener(sliderListener(radiusValue, "%"));
+        bindLiveSlider(radius, "%", () -> {
+            target.data.cornerRadius = radius.getProgress();
+            canvas.rebuild();
+        });
+        addLabel(form, R.string.pojav_controls_shape);
+        Spinner shape = new Spinner(activity);
+        String[] shapeNames = new String[]{
+                activity.getString(R.string.pojav_controls_shape_rounded),
+                activity.getString(R.string.pojav_controls_shape_pill),
+                activity.getString(R.string.pojav_controls_shape_square),
+                activity.getString(R.string.pojav_controls_shape_circle)
+        };
+        shape.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item, shapeNames));
+        shape.setSelection(Math.max(0, Math.min(ControlData.SHAPE_CIRCLE, target.data.shape)));
+        form.addView(shape);
+        shape.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (target.data.shape == position) return;
+                target.data.shape = position;
+                canvas.rebuild();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
         CheckBox toggle = check(form, R.string.pojav_controls_toggle, target.data.isToggle);
         CheckBox swipeable = check(form, R.string.pojav_controls_swipeable, target.data.isSwipeable);
         CheckBox passThrough = check(form, R.string.pojav_controls_pass_through, target.data.passThruEnabled);
@@ -507,6 +548,7 @@ final class PojavControlsEditorView extends FrameLayout {
                     target.data.strokeColor = color(stroke, target.data.strokeColor);
                     target.data.strokeWidth = strokeWidth.getProgress();
                     target.data.cornerRadius = radius.getProgress();
+                    target.data.shape = shape.getSelectedItemPosition();
                     target.data.isToggle = toggle.isChecked();
                     target.data.isSwipeable = swipeable.isChecked();
                     target.data.passThruEnabled = passThrough.isChecked();
@@ -574,8 +616,21 @@ final class PojavControlsEditorView extends FrameLayout {
         form.addView(bar, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * getResources().getDisplayMetrics().density)));
         TextView value = sliderValue(form, bar.getProgress(), suffix);
+        bar.setTag(value);
         bar.setOnSeekBarChangeListener(sliderListener(value, suffix));
         return bar;
+    }
+
+    private void bindLiveSlider(SeekBar bar, String suffix, Runnable action) {
+        TextView value = (TextView) bar.getTag();
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar slider, int progress, boolean fromUser) {
+                value.setText(progress + suffix);
+                action.run();
+            }
+            @Override public void onStartTrackingTouch(SeekBar slider) {}
+            @Override public void onStopTrackingTouch(SeekBar slider) {}
+        });
     }
 
     private TextView sliderValue(LinearLayout form, int value, String suffix) {
