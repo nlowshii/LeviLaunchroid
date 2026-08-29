@@ -7,22 +7,35 @@ import java.util.List;
 
 @Keep
 public class CustomControls {
-    public int version = 8;
+    public int version = 9;
     public float scaledAt = 100f;
     public static final int CURSOR_MODE_FOLLOW_FINGER = 0;
     public static final int CURSOR_MODE_RELATIVE = 1;
+    public static final int CURSOR_ANIMATION_AUTO = 0;
+    public static final int CURSOR_ANIMATION_GIF = 1;
+    public static final int CURSOR_ANIMATION_SPRITE = 2;
     public float virtualMouseScale = 1f;
     public String virtualMouseImageUri = "";
+    public int virtualMouseAnimationMode = CURSOR_ANIMATION_AUTO;
+    public int virtualMouseSpriteColumns = 1;
+    public int virtualMouseSpriteRows = 1;
+    public int virtualMouseFrameDurationMs = 100;
+    public String virtualMouseClickSoundUri = "";
     public int virtualMouseMode = CURSOR_MODE_FOLLOW_FINGER;
     public List<ControlData> mControlDataList = new ArrayList<>();
     public List<ControlDrawerData> mDrawerDataList = new ArrayList<>();
     public List<ControlJoystickData> mJoystickDataList = new ArrayList<>();
 
     public void normalize() {
-        version = 8;
+        version = 9;
         if (scaledAt <= 0f) scaledAt = 100f;
         virtualMouseScale = Math.max(0.2f, Math.min(2f, virtualMouseScale <= 0f ? 1f : virtualMouseScale));
         if (virtualMouseImageUri == null) virtualMouseImageUri = "";
+        if (virtualMouseAnimationMode < CURSOR_ANIMATION_AUTO || virtualMouseAnimationMode > CURSOR_ANIMATION_SPRITE) virtualMouseAnimationMode = CURSOR_ANIMATION_AUTO;
+        virtualMouseSpriteColumns = Math.max(1, Math.min(16, virtualMouseSpriteColumns));
+        virtualMouseSpriteRows = Math.max(1, Math.min(16, virtualMouseSpriteRows));
+        virtualMouseFrameDurationMs = Math.max(30, Math.min(2000, virtualMouseFrameDurationMs <= 0 ? 100 : virtualMouseFrameDurationMs));
+        if (virtualMouseClickSoundUri == null) virtualMouseClickSoundUri = "";
         if (virtualMouseMode != CURSOR_MODE_RELATIVE) virtualMouseMode = CURSOR_MODE_FOLLOW_FINGER;
         if (mControlDataList == null) mControlDataList = new ArrayList<>();
         if (mDrawerDataList == null) mDrawerDataList = new ArrayList<>();

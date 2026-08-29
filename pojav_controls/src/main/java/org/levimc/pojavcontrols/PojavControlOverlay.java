@@ -11,7 +11,11 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Movie;
+import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
+import android.media.AudioAttributes;
+import android.media.SoundPool;
 import android.os.Build;
 import android.net.Uri;
 import android.os.SystemClock;
@@ -21,10 +25,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 final class PojavControlOverlay extends ViewGroup {
     private final Activity activity;
@@ -44,6 +50,9 @@ final class PojavControlOverlay extends ViewGroup {
     private boolean virtualPrimaryDown;
     private boolean virtualSecondaryDown;
     private boolean receiverRegistered;
+    private SoundPool clickSoundPool;
+    private int clickSoundId;
+    private boolean clickSoundLoaded;
 
     private final BroadcastReceiver profileReceiver = new BroadcastReceiver() {
         @Override
@@ -76,6 +85,7 @@ final class PojavControlOverlay extends ViewGroup {
         drawers.clear();
         drawerPlacements.clear();
         profile = repository.loadActive();
+        loadClickSound(profile.virtualMouseClickSoundUri);
         addView(runtimeSurface);
         for (ControlData data : profile.mControlDataList) addRuntimeButton(data);
         for (ControlJoystickData data : profile.mJoystickDataList) {
@@ -84,10 +94,12 @@ final class PojavControlOverlay extends ViewGroup {
             addView(joystick);
         }
         for (ControlDrawerData data : profile.mDrawerDataList) addDrawer(data);
-        cursorView.configure(profile.virtualMouseImageUri, profile.virtualMouseScale);
+        cursorView.configure(profile.virtualMouseImageUri, profile.virtualMouseScale,
+                profile.virtualMouseAnimationMode, profile.virtualMouseSpriteColumns,
+                profile.virtualMouseSpriteRows, profile.virtualMouseFrameDurationMs);
         addView(cursorView);
         clampVirtualCursor();
-        cursorView.setVisibility(virtualMouse ? VISIBLE : GONE);
+        cursorView.setVisibility(virtualMouse && host.pojavIsMenuOpen() ? VISIBLE : GONE);
         updateVirtualMouseButtons();
         requestLayout();
         invalidate();
@@ -102,6 +114,7 @@ final class PojavControlOverlay extends ViewGroup {
 
     void dispose() {
         releaseAll();
+        releaseClickSound();
         if (receiverRegistered) {
             try {
                 activity.unregisterReceiver(profileReceiver);
@@ -185,6 +198,42 @@ final class PojavControlOverlay extends ViewGroup {
         return height > 0 ? 1.4f * 1080f / height : 1.4f;
     }
 
+    private void loadClickSound(String imageUri) {
+        releaseClickSound();
+        if (imageUri == null || imageUri.isBlank()) return;
+        try {
+            AudioAttributes attributes = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build();
+            clickSoundPool = new SoundPool.Builder()
+                    .setAudioAttributes(attributes)
+                    .setMaxStreams(4)
+                    .build();
+            clickSoundPool.setOnLoadCompleteListener((pool, sampleId, status) -> {
+                if (status == 0 && sampleId == clickSoundId) clickSoundLoaded = true;
+            });
+            clickSoundId = clickSoundPool.load(activity, Uri.parse(imageUri), 1);
+        } catch (Exception ignored) {
+            releaseClickSound();
+        }
+    }
+
+    private void releaseClickSound() {
+        clickSoundLoaded = false;
+        clickSoundId = 0;
+        if (clickSoundPool != null) {
+            clickSoundPool.release();
+            clickSoundPool = null;
+        }
+    }
+
+    private void playClickSound() {
+        if (clickSoundPool != null && clickSoundLoaded && clickSoundId != 0) {
+            clickSoundPool.play(clickSoundId, 1f, 1f, 1, 0, 1f);
+        }
+    }
+
     private void setVirtualMouse(boolean enabled) {
         if (virtualMouse == enabled) return;
         runtimeSurface.release();
@@ -198,7 +247,7 @@ final class PojavControlOverlay extends ViewGroup {
             clampVirtualCursor();
             host.pojavSendPointer(virtualCursorX, virtualCursorY);
         }
-        cursorView.setVisibility(enabled ? VISIBLE : GONE);
+        cursorView.setVisibility(enabled && host.pojavIsMenuOpen() ? VISIBLE : GONE);
         updateVirtualMouseButtons();
         requestLayout();
     }
@@ -342,13 +391,15 @@ final class PojavControlOverlay extends ViewGroup {
     }
 
     private void addRuntimeButton(ControlData data) {
-        RuntimeButton button = new RuntimeButton(getContext(), data, host, this::handleSpecialAction);
+        RuntimeButton button = new RuntimeButton(getContext(), data, host, this::handleSpecialAction,
+                this::playClickSound);
         buttons.add(button);
         addView(button);
     }
 
     private void addDrawer(ControlDrawerData data) {
-        RuntimeButton pull = new RuntimeButton(getContext(), data.properties, host, this::handleSpecialAction);
+        RuntimeButton pull = new RuntimeButton(getContext(), data.properties, host, this::handleSpecialAction,
+                this::playClickSound);
         DrawerRuntime runtime = new DrawerRuntime(data, pull);
         pull.setOnClickListener(view -> {
             runtime.open = !runtime.open;
@@ -358,7 +409,7 @@ final class PojavControlOverlay extends ViewGroup {
         addView(pull);
         for (int i = 0; i < data.buttonProperties.size(); i++) {
             RuntimeButton button = new RuntimeButton(getContext(), data.buttonProperties.get(i), host,
-                    this::handleSpecialAction);
+                    this::handleSpecialAction, this::playClickSound);
             runtime.children.add(button);
             buttons.add(button);
             drawerPlacements.put(button, new DrawerPlacement(runtime, i));
@@ -392,6 +443,7 @@ final class PojavControlOverlay extends ViewGroup {
 
     private void updateVisibility() {
         boolean menu = host.pojavIsMenuOpen();
+        cursorView.setVisibility(virtualMouse && menu ? VISIBLE : GONE);
         for (RuntimeButton button : buttons) {
             boolean specialToggle = button.data.keycodes[0] == ControlData.SPECIALBTN_TOGGLECTRL;
             boolean visible = specialToggle || (controlsVisible && button.isVisibleForMode(menu));
@@ -492,6 +544,11 @@ final class PojavControlOverlay extends ViewGroup {
         private final Paint outline = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path pointer = new Path();
         private Bitmap customBitmap;
+        private Movie animatedMovie;
+        private int spriteColumns = 1;
+        private int spriteRows = 1;
+        private int frameDurationMs = 100;
+        private long animationStartedAt;
 
         VirtualMouseCursor(Context context) {
             super(context);
@@ -505,15 +562,29 @@ final class PojavControlOverlay extends ViewGroup {
             setFocusable(false);
         }
 
-        void configure(String imageUri, float scale) {
+        void configure(String imageUri, float scale, int animationMode, int columns, int rows, int durationMs) {
             if (customBitmap != null && !customBitmap.isRecycled()) customBitmap.recycle();
             customBitmap = null;
+            animatedMovie = null;
+            spriteColumns = Math.max(1, Math.min(16, columns));
+            spriteRows = Math.max(1, Math.min(16, rows));
+            frameDurationMs = Math.max(30, Math.min(2000, durationMs));
+            animationStartedAt = SystemClock.uptimeMillis();
             if (imageUri != null && !imageUri.isBlank()) {
-                try {
-                    Uri uri = Uri.parse(imageUri);
-                    customBitmap = BitmapFactory.decodeStream(getContext().getContentResolver().openInputStream(uri));
+                Uri uri = Uri.parse(imageUri);
+                try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
+                    if (input != null && animationMode != CustomControls.CURSOR_ANIMATION_SPRITE) {
+                        animatedMovie = Movie.decodeStream(input);
+                    }
                 } catch (Exception ignored) {
-                    customBitmap = null;
+                    animatedMovie = null;
+                }
+                if (animatedMovie == null) {
+                    try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
+                        if (input != null) customBitmap = BitmapFactory.decodeStream(input);
+                    } catch (Exception ignored) {
+                        customBitmap = null;
+                    }
                 }
             }
             requestLayout();
@@ -522,9 +593,31 @@ final class PojavControlOverlay extends ViewGroup {
 
         @Override
         protected void onDraw(Canvas canvas) {
+            if (animatedMovie != null) {
+                int duration = animatedMovie.duration() > 0 ? animatedMovie.duration() : frameDurationMs;
+                int time = (int) ((SystemClock.uptimeMillis() - animationStartedAt) % duration);
+                animatedMovie.setTime(time);
+                animatedMovie.draw(canvas, 0, 0);
+                postInvalidateDelayed(16L);
+                return;
+            }
             if (customBitmap != null && !customBitmap.isRecycled()) {
-                canvas.drawBitmap(customBitmap, null,
-                        new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                if (spriteColumns > 1 || spriteRows > 1) {
+                    int frameCount = spriteColumns * spriteRows;
+                    int frame = (int) (((SystemClock.uptimeMillis() - animationStartedAt) / frameDurationMs) % frameCount);
+                    int frameWidth = Math.max(1, customBitmap.getWidth() / spriteColumns);
+                    int frameHeight = Math.max(1, customBitmap.getHeight() / spriteRows);
+                    Rect source = new Rect((frame % spriteColumns) * frameWidth,
+                            (frame / spriteColumns) * frameHeight,
+                            Math.min(customBitmap.getWidth(), (frame % spriteColumns + 1) * frameWidth),
+                            Math.min(customBitmap.getHeight(), (frame / spriteColumns + 1) * frameHeight));
+                    canvas.drawBitmap(customBitmap, source,
+                            new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                    postInvalidateDelayed(16L);
+                } else {
+                    canvas.drawBitmap(customBitmap, null,
+                            new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                }
                 return;
             }
             float density = getResources().getDisplayMetrics().density;
@@ -547,6 +640,7 @@ final class PojavControlOverlay extends ViewGroup {
         final ControlData data;
         private final PojavControlsHost host;
         private final SpecialActionHandler specialHandler;
+        private final Runnable clickSound;
         private boolean pressed;
         private boolean toggled;
         private boolean outside;
@@ -557,11 +651,12 @@ final class PojavControlOverlay extends ViewGroup {
         private float passThroughY;
 
         RuntimeButton(Context context, ControlData data, PojavControlsHost host,
-                      SpecialActionHandler specialHandler) {
+                      SpecialActionHandler specialHandler, Runnable clickSound) {
             super(context);
             this.data = data;
             this.host = host;
             this.specialHandler = specialHandler;
+            this.clickSound = clickSound;
             setText(data.name);
             setGravity(Gravity.CENTER);
             setTextColor(Color.WHITE);
@@ -660,6 +755,7 @@ final class PojavControlOverlay extends ViewGroup {
         private void press(boolean down) {
             if (pressed == down) return;
             pressed = down;
+            if (down) clickSound.run();
             send(down);
             refreshState();
             setScaleX(down ? 0.94f : 1f);

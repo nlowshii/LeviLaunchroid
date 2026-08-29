@@ -35,6 +35,7 @@ final class PojavControlsEditorView extends FrameLayout {
     static final int REQUEST_IMPORT = 4101;
     static final int REQUEST_EXPORT = 4102;
     static final int REQUEST_CURSOR_IMAGE = 4103;
+    static final int REQUEST_CURSOR_SOUND = 4104;
 
     private final Activity activity;
     private final Runnable closeAction;
@@ -150,7 +151,7 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE) return false;
+        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND) return false;
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri uri = data.getData();
         try {
@@ -180,6 +181,17 @@ final class PojavControlsEditorView extends FrameLayout {
                 profile.virtualMouseImageUri = uri.toString();
                 saveCurrent(false);
                 Toast.makeText(activity, R.string.pojav_controls_image_selected, Toast.LENGTH_SHORT).show();
+            } else if (requestCode == REQUEST_CURSOR_SOUND) {
+                int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+                    try {
+                        activity.getContentResolver().takePersistableUriPermission(uri, flags);
+                    } catch (SecurityException ignored) {
+                    }
+                }
+                profile.virtualMouseClickSoundUri = uri.toString();
+                saveCurrent(false);
+                Toast.makeText(activity, R.string.pojav_controls_sound_selected, Toast.LENGTH_SHORT).show();
             } else {
                 saveCurrent(false);
                 try (OutputStream output = activity.getContentResolver().openOutputStream(uri, "wt")) {
@@ -279,6 +291,67 @@ final class PojavControlsEditorView extends FrameLayout {
         choose.setOnClickListener(view -> startCursorImagePick());
         form.addView(choose);
 
+        TextView animationLabel = new TextView(activity);
+        animationLabel.setText(R.string.pojav_controls_cursor_animation_mode);
+        animationLabel.setTextColor(0xFFB8C0C8);
+        form.addView(animationLabel);
+
+        Spinner animationMode = new Spinner(activity);
+        animationMode.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{activity.getString(R.string.pojav_controls_cursor_mode_auto),
+                        activity.getString(R.string.pojav_controls_cursor_mode_gif),
+                        activity.getString(R.string.pojav_controls_cursor_mode_sprite)}));
+        animationMode.setSelection(Math.max(0, Math.min(2, profile.virtualMouseAnimationMode)));
+        form.addView(animationMode);
+
+        TextView columnsValue = new TextView(activity);
+        columnsValue.setTextColor(0xFFB8C0C8);
+        form.addView(columnsValue);
+        SeekBar columns = new SeekBar(activity);
+        columns.setMax(15);
+        columns.setProgress(profile.virtualMouseSpriteColumns - 1);
+        form.addView(columns);
+        columns.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + (progress + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + profile.virtualMouseSpriteColumns);
+
+        TextView rowsValue = new TextView(activity);
+        rowsValue.setTextColor(0xFFB8C0C8);
+        form.addView(rowsValue);
+        SeekBar rows = new SeekBar(activity);
+        rows.setMax(15);
+        rows.setProgress(profile.virtualMouseSpriteRows - 1);
+        form.addView(rows);
+        rows.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + (progress + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + profile.virtualMouseSpriteRows);
+
+        TextView durationValue = new TextView(activity);
+        durationValue.setTextColor(0xFFB8C0C8);
+        form.addView(durationValue);
+        SeekBar duration = new SeekBar(activity);
+        duration.setMax(1970);
+        duration.setProgress(profile.virtualMouseFrameDurationMs - 30);
+        form.addView(duration);
+        duration.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + (progress + 30));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + profile.virtualMouseFrameDurationMs);
+
         Button clear = new Button(activity);
         clear.setText(R.string.pojav_controls_clear_image);
         clear.setAllCaps(false);
@@ -289,6 +362,22 @@ final class PojavControlsEditorView extends FrameLayout {
         });
         form.addView(clear);
 
+        Button chooseSound = new Button(activity);
+        chooseSound.setText(R.string.pojav_controls_choose_sound);
+        chooseSound.setAllCaps(false);
+        chooseSound.setOnClickListener(view -> startCursorSoundPick());
+        form.addView(chooseSound);
+
+        Button clearSound = new Button(activity);
+        clearSound.setText(R.string.pojav_controls_clear_sound);
+        clearSound.setAllCaps(false);
+        clearSound.setOnClickListener(view -> {
+            profile.virtualMouseClickSoundUri = "";
+            saveCurrent(false);
+            Toast.makeText(activity, R.string.pojav_controls_sound_cleared, Toast.LENGTH_SHORT).show();
+        });
+        form.addView(clearSound);
+
         ScrollView scroll = new ScrollView(activity);
         scroll.addView(form, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
@@ -298,6 +387,10 @@ final class PojavControlsEditorView extends FrameLayout {
                 .setView(scroll)
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                     profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
+                    profile.virtualMouseAnimationMode = animationMode.getSelectedItemPosition();
+                    profile.virtualMouseSpriteColumns = columns.getProgress() + 1;
+                    profile.virtualMouseSpriteRows = rows.getProgress() + 1;
+                    profile.virtualMouseFrameDurationMs = duration.getProgress() + 30;
                     profile.virtualMouseMode = cursorModes.getCheckedRadioButtonId() == relativeCursor.getId()
                             ? CustomControls.CURSOR_MODE_RELATIVE : CustomControls.CURSOR_MODE_FOLLOW_FINGER;
                     profile.normalize();
@@ -306,6 +399,14 @@ final class PojavControlsEditorView extends FrameLayout {
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    private void startCursorSoundPick() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("audio/ogg");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(intent, REQUEST_CURSOR_SOUND);
     }
 
     private void startCursorImagePick() {
