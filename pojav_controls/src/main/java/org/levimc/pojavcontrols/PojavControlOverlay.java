@@ -25,7 +25,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -53,6 +56,7 @@ final class PojavControlOverlay extends ViewGroup {
     private SoundPool clickSoundPool;
     private int clickSoundId;
     private boolean clickSoundLoaded;
+    private File clickSoundCacheFile;
 
     private final BroadcastReceiver profileReceiver = new BroadcastReceiver() {
         @Override
@@ -213,7 +217,15 @@ final class PojavControlOverlay extends ViewGroup {
             clickSoundPool.setOnLoadCompleteListener((pool, sampleId, status) -> {
                 if (status == 0 && sampleId == clickSoundId) clickSoundLoaded = true;
             });
-            clickSoundId = clickSoundPool.load(activity, Uri.parse(imageUri), 1);
+            clickSoundCacheFile = new File(activity.getCacheDir(), "pojav_controls_click.ogg");
+            try (InputStream input = activity.getContentResolver().openInputStream(Uri.parse(imageUri));
+                 OutputStream output = new FileOutputStream(clickSoundCacheFile)) {
+                if (input == null) throw new IllegalStateException();
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            }
+            clickSoundId = clickSoundPool.load(clickSoundCacheFile.getAbsolutePath(), 1);
         } catch (Exception ignored) {
             releaseClickSound();
         }
@@ -225,6 +237,10 @@ final class PojavControlOverlay extends ViewGroup {
         if (clickSoundPool != null) {
             clickSoundPool.release();
             clickSoundPool = null;
+        }
+        if (clickSoundCacheFile != null) {
+            clickSoundCacheFile.delete();
+            clickSoundCacheFile = null;
         }
     }
 
