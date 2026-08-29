@@ -99,8 +99,9 @@ final class PojavControlOverlay extends ViewGroup {
         }
         for (ControlDrawerData data : profile.mDrawerDataList) addDrawer(data);
         cursorView.configure(profile.virtualMouseImageUri, profile.virtualMouseScale,
-                profile.virtualMouseAnimationMode, profile.virtualMouseSpriteColumns,
-                profile.virtualMouseSpriteRows, profile.virtualMouseFrameDurationMs);
+                profile.virtualMouseAnimationMode, profile.virtualMouseFrameUris,
+                profile.virtualMouseSpriteColumns, profile.virtualMouseSpriteRows,
+                profile.virtualMouseFrameDurationMs);
         addView(cursorView);
         clampVirtualCursor();
         cursorView.setVisibility(virtualMouse && host.pojavIsMenuOpen() ? VISIBLE : GONE);
@@ -560,6 +561,7 @@ final class PojavControlOverlay extends ViewGroup {
         private final Paint outline = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path pointer = new Path();
         private Bitmap customBitmap;
+        private final ArrayList<Bitmap> individualFrames = new ArrayList<>();
         private Movie animatedMovie;
         private int spriteColumns = 1;
         private int spriteRows = 1;
@@ -578,15 +580,30 @@ final class PojavControlOverlay extends ViewGroup {
             setFocusable(false);
         }
 
-        void configure(String imageUri, float scale, int animationMode, int columns, int rows, int durationMs) {
+        void configure(String imageUri, float scale, int animationMode, List<String> frameUris,
+                       int columns, int rows, int durationMs) {
             if (customBitmap != null && !customBitmap.isRecycled()) customBitmap.recycle();
             customBitmap = null;
+            for (Bitmap frame : individualFrames) if (frame != null && !frame.isRecycled()) frame.recycle();
+            individualFrames.clear();
             animatedMovie = null;
             spriteColumns = Math.max(1, Math.min(16, columns));
             spriteRows = Math.max(1, Math.min(16, rows));
             frameDurationMs = Math.max(30, Math.min(2000, durationMs));
             animationStartedAt = SystemClock.uptimeMillis();
-            if (imageUri != null && !imageUri.isBlank()) {
+            if (animationMode == CustomControls.CURSOR_ANIMATION_FRAMES && frameUris != null) {
+                for (String frameUri : frameUris) {
+                    if (frameUri == null || frameUri.isBlank()) continue;
+                    try (InputStream input = getContext().getContentResolver().openInputStream(Uri.parse(frameUri))) {
+                        if (input != null) {
+                            Bitmap frame = BitmapFactory.decodeStream(input);
+                            if (frame != null) individualFrames.add(frame);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            if (imageUri != null && !imageUri.isBlank() && individualFrames.isEmpty()) {
                 Uri uri = Uri.parse(imageUri);
                 try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
                     if (input != null && animationMode != CustomControls.CURSOR_ANIMATION_SPRITE) {
@@ -609,6 +626,13 @@ final class PojavControlOverlay extends ViewGroup {
 
         @Override
         protected void onDraw(Canvas canvas) {
+            if (!individualFrames.isEmpty()) {
+                int frame = (int) (((SystemClock.uptimeMillis() - animationStartedAt) / frameDurationMs) % individualFrames.size());
+                Bitmap bitmap = individualFrames.get(frame);
+                canvas.drawBitmap(bitmap, null, new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                postInvalidateDelayed(16L);
+                return;
+            }
             if (animatedMovie != null) {
                 int duration = animatedMovie.duration() > 0 ? animatedMovie.duration() : frameDurationMs;
                 int time = (int) ((SystemClock.uptimeMillis() - animationStartedAt) % duration);

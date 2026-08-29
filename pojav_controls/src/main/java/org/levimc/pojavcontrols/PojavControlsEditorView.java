@@ -36,6 +36,8 @@ final class PojavControlsEditorView extends FrameLayout {
     static final int REQUEST_EXPORT = 4102;
     static final int REQUEST_CURSOR_IMAGE = 4103;
     static final int REQUEST_CURSOR_SOUND = 4104;
+    static final int REQUEST_CURSOR_FRAME_BASE = 4200;
+    static final int CURSOR_FRAME_COUNT = 6;
 
     private final Activity activity;
     private final Runnable closeAction;
@@ -45,6 +47,7 @@ final class PojavControlsEditorView extends FrameLayout {
     private final ControlEditorCanvas canvas;
     private final Spinner profileSpinner;
     private boolean profileSpinnerBusy;
+    private int pendingCursorFrameSlot;
 
     PojavControlsEditorView(Activity activity, Runnable closeAction) {
         super(activity);
@@ -151,7 +154,8 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND) return false;
+        boolean frameRequest = requestCode >= REQUEST_CURSOR_FRAME_BASE && requestCode < REQUEST_CURSOR_FRAME_BASE + CURSOR_FRAME_COUNT;
+        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND && !frameRequest) return false;
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri uri = data.getData();
         try {
@@ -181,6 +185,12 @@ final class PojavControlsEditorView extends FrameLayout {
                 profile.virtualMouseImageUri = uri.toString();
                 saveCurrent(false);
                 Toast.makeText(activity, R.string.pojav_controls_image_selected, Toast.LENGTH_SHORT).show();
+            } else if (frameRequest) {
+                profile.normalize();
+                int slot = requestCode - REQUEST_CURSOR_FRAME_BASE;
+                profile.virtualMouseFrameUris.set(slot, uri.toString());
+                saveCurrent(false);
+                Toast.makeText(activity, R.string.pojav_controls_frame_selected, Toast.LENGTH_SHORT).show();
             } else if (requestCode == REQUEST_CURSOR_SOUND) {
                 int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
@@ -291,6 +301,26 @@ final class PojavControlsEditorView extends FrameLayout {
         choose.setOnClickListener(view -> startCursorImagePick());
         form.addView(choose);
 
+        TextView frameSlotLabel = new TextView(activity);
+        frameSlotLabel.setText(R.string.pojav_controls_cursor_frame_slot);
+        frameSlotLabel.setTextColor(0xFFB8C0C8);
+        form.addView(frameSlotLabel);
+
+        Spinner frameSlot = new Spinner(activity);
+        String[] frameEntries = new String[CURSOR_FRAME_COUNT];
+        for (int i = 0; i < CURSOR_FRAME_COUNT; i++) frameEntries[i] = "Frame " + (i + 1);
+        frameSlot.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item, frameEntries));
+        form.addView(frameSlot);
+
+        Button chooseFrame = new Button(activity);
+        chooseFrame.setText(R.string.pojav_controls_choose_frame);
+        chooseFrame.setAllCaps(false);
+        chooseFrame.setOnClickListener(view -> {
+            pendingCursorFrameSlot = frameSlot.getSelectedItemPosition();
+            startCursorFramePick(pendingCursorFrameSlot);
+        });
+        form.addView(chooseFrame);
+
         TextView animationLabel = new TextView(activity);
         animationLabel.setText(R.string.pojav_controls_cursor_animation_mode);
         animationLabel.setTextColor(0xFFB8C0C8);
@@ -300,8 +330,9 @@ final class PojavControlsEditorView extends FrameLayout {
         animationMode.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
                 new String[]{activity.getString(R.string.pojav_controls_cursor_mode_auto),
                         activity.getString(R.string.pojav_controls_cursor_mode_gif),
-                        activity.getString(R.string.pojav_controls_cursor_mode_sprite)}));
-        animationMode.setSelection(Math.max(0, Math.min(2, profile.virtualMouseAnimationMode)));
+                        activity.getString(R.string.pojav_controls_cursor_mode_sprite),
+                        activity.getString(R.string.pojav_controls_cursor_mode_frames)}));
+        animationMode.setSelection(Math.max(0, Math.min(3, profile.virtualMouseAnimationMode)));
         form.addView(animationMode);
 
         TextView columnsValue = new TextView(activity);
@@ -399,6 +430,14 @@ final class PojavControlsEditorView extends FrameLayout {
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    private void startCursorFramePick(int slot) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(intent, REQUEST_CURSOR_FRAME_BASE + Math.max(0, Math.min(CURSOR_FRAME_COUNT - 1, slot)));
     }
 
     private void startCursorSoundPick() {

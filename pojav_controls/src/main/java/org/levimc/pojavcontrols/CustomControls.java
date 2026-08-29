@@ -7,15 +7,17 @@ import java.util.List;
 
 @Keep
 public class CustomControls {
-    public int version = 9;
+    public int version = 10
     public float scaledAt = 100f;
     public static final int CURSOR_MODE_FOLLOW_FINGER = 0;
     public static final int CURSOR_MODE_RELATIVE = 1;
     public static final int CURSOR_ANIMATION_AUTO = 0;
     public static final int CURSOR_ANIMATION_GIF = 1;
     public static final int CURSOR_ANIMATION_SPRITE = 2;
+    public static final int CURSOR_ANIMATION_FRAMES = 3;
     public float virtualMouseScale = 1f;
     public String virtualMouseImageUri = "";
+    public List<String> virtualMouseFrameUris = new ArrayList<>();
     public int virtualMouseAnimationMode = CURSOR_ANIMATION_AUTO;
     public int virtualMouseSpriteColumns = 1;
     public int virtualMouseSpriteRows = 1;
@@ -27,11 +29,15 @@ public class CustomControls {
     public List<ControlJoystickData> mJoystickDataList = new ArrayList<>();
 
     public void normalize() {
-        version = 9;
+        version = 10;
         if (scaledAt <= 0f) scaledAt = 100f;
         virtualMouseScale = Math.max(0.2f, Math.min(2f, virtualMouseScale <= 0f ? 1f : virtualMouseScale));
         if (virtualMouseImageUri == null) virtualMouseImageUri = "";
-        if (virtualMouseAnimationMode < CURSOR_ANIMATION_AUTO || virtualMouseAnimationMode > CURSOR_ANIMATION_SPRITE) virtualMouseAnimationMode = CURSOR_ANIMATION_AUTO;
+        if (virtualMouseAnimationMode < CURSOR_ANIMATION_AUTO || virtualMouseAnimationMode > CURSOR_ANIMATION_FRAMES) virtualMouseAnimationMode = CURSOR_ANIMATION_AUTO;
+        if (virtualMouseFrameUris == null) virtualMouseFrameUris = new ArrayList<>();
+        while (virtualMouseFrameUris.size() < 6) virtualMouseFrameUris.add("");
+        if (virtualMouseFrameUris.size() > 6) virtualMouseFrameUris = new ArrayList<>(virtualMouseFrameUris.subList(0, 6));
+        for (int i = 0; i < virtualMouseFrameUris.size(); i++) if (virtualMouseFrameUris.get(i) == null) virtualMouseFrameUris.set(i, "");
         virtualMouseSpriteColumns = Math.max(1, Math.min(16, virtualMouseSpriteColumns));
         virtualMouseSpriteRows = Math.max(1, Math.min(16, virtualMouseSpriteRows));
         virtualMouseFrameDurationMs = Math.max(30, Math.min(2000, virtualMouseFrameDurationMs <= 0 ? 100 : virtualMouseFrameDurationMs));
