@@ -253,7 +253,7 @@ final class PojavControlOverlay extends ViewGroup {
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
-            if (!virtualMouse) return false;
+            if (!virtualMouse && host.pojavIsMenuOpen()) return false;
             int action = event.getActionMasked();
             int actionIndex = event.getActionIndex();
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {

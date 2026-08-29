@@ -289,9 +289,13 @@ final class PojavControlsEditorView extends FrameLayout {
         });
         form.addView(clear);
 
+        ScrollView scroll = new ScrollView(activity);
+        scroll.addView(form, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
+
         new AlertDialog.Builder(activity)
                 .setTitle(R.string.pojav_controls_mouse_settings)
-                .setView(form)
+                .setView(scroll)
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                     profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
                     profile.virtualMouseMode = cursorModes.getCheckedRadioButtonId() == relativeCursor.getId()
