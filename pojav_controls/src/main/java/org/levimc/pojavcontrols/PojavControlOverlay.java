@@ -62,7 +62,7 @@ final class PojavControlOverlay extends ViewGroup {
         setClipChildren(false);
         setClipToPadding(false);
         setMotionEventSplittingEnabled(true);
-        setClickable(true);
+        setClickable(false);
         setFocusable(false);
         registerProfileReceiver();
         reloadProfile();
@@ -253,6 +253,7 @@ final class PojavControlOverlay extends ViewGroup {
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
+            if (!virtualMouse) return false;
             int action = event.getActionMasked();
             int actionIndex = event.getActionIndex();
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
