@@ -249,7 +249,7 @@ final class PojavControlsEditorView extends FrameLayout {
         mousePreview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mousePreview.setPadding(padding, padding, padding, padding);
         mousePreview.setBackground(surfaceBackground(0xFF4A4D56, 0.30f, density));
-        mousePreview.setImageResource(org.levimc.pojavcontrols.R.drawable.ic_virtual_cursor);
+        mousePreview.setImageDrawable(null);
         form.addView(mousePreview, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(118 * density)));
         updateMousePreview(profile.virtualMouseImageUri);
@@ -299,7 +299,7 @@ final class PojavControlsEditorView extends FrameLayout {
         Button clear = settingsButton(R.string.pojav_controls_clear_image, density);
         clear.setOnClickListener(view -> {
             profile.virtualMouseImageUri = "";
-            if (mousePreview != null) mousePreview.setImageResource(org.levimc.pojavcontrols.R.drawable.ic_virtual_cursor);
+            if (mousePreview != null) mousePreview.setImageDrawable(null);
             saveCurrent(false);
         });
         form.addView(clear);
