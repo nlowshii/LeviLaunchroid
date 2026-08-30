@@ -10,17 +10,6 @@
     <string name="pojav_controls_mouse_scale">Mouse cursor size</string>
     <string name="pojav_controls_choose_image">Choose cursor image</string>
     <string name="pojav_controls_clear_image">Clear custom image</string>
-    <string name="pojav_controls_cursor_animation_mode">Cursor animation mode</string>
-    <string name="pojav_controls_cursor_mode_auto">Auto detect</string>
-    <string name="pojav_controls_cursor_mode_gif">GIF animation</string>
-    <string name="pojav_controls_cursor_mode_sprite">Sprite sheet</string>
-    <string name="pojav_controls_cursor_mode_frames">Individual frames</string>
-    <string name="pojav_controls_cursor_frame_slot">Cursor frame slot</string>
-    <string name="pojav_controls_choose_frame">Choose frame image</string>
-    <string name="pojav_controls_frame_selected">Cursor frame selected</string>
-    <string name="pojav_controls_sprite_columns">Sprite columns</string>
-    <string name="pojav_controls_sprite_rows">Sprite rows</string>
-    <string name="pojav_controls_frame_duration">Frame duration (ms)</string>
     <string name="pojav_controls_choose_sound">Choose OGG click sound</string>
     <string name="pojav_controls_clear_sound">Clear click sound</string>
     <string name="pojav_controls_sound_selected">Click sound selected</string>

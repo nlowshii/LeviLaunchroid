@@ -13,6 +13,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
@@ -36,8 +37,6 @@ final class PojavControlsEditorView extends FrameLayout {
     static final int REQUEST_EXPORT = 4102;
     static final int REQUEST_CURSOR_IMAGE = 4103;
     static final int REQUEST_CURSOR_SOUND = 4104;
-    static final int REQUEST_CURSOR_FRAME_BASE = 4200;
-    static final int CURSOR_FRAME_COUNT = 6;
 
     private final Activity activity;
     private final Runnable closeAction;
@@ -47,7 +46,7 @@ final class PojavControlsEditorView extends FrameLayout {
     private final ControlEditorCanvas canvas;
     private final Spinner profileSpinner;
     private boolean profileSpinnerBusy;
-    private int pendingCursorFrameSlot;
+    private ImageView mousePreview;
 
     PojavControlsEditorView(Activity activity, Runnable closeAction) {
         super(activity);
@@ -154,8 +153,7 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
-        boolean frameRequest = requestCode >= REQUEST_CURSOR_FRAME_BASE && requestCode < REQUEST_CURSOR_FRAME_BASE + CURSOR_FRAME_COUNT;
-        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND && !frameRequest) return false;
+        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND) return false;
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri uri = data.getData();
         try {
@@ -183,14 +181,9 @@ final class PojavControlsEditorView extends FrameLayout {
                     }
                 }
                 profile.virtualMouseImageUri = uri.toString();
+                updateMousePreview(profile.virtualMouseImageUri);
                 saveCurrent(false);
                 Toast.makeText(activity, R.string.pojav_controls_image_selected, Toast.LENGTH_SHORT).show();
-            } else if (frameRequest) {
-                profile.normalize();
-                int slot = requestCode - REQUEST_CURSOR_FRAME_BASE;
-                profile.virtualMouseFrameUris.set(slot, uri.toString());
-                saveCurrent(false);
-                Toast.makeText(activity, R.string.pojav_controls_frame_selected, Toast.LENGTH_SHORT).show();
             } else if (requestCode == REQUEST_CURSOR_SOUND) {
                 int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
@@ -239,177 +232,91 @@ final class PojavControlsEditorView extends FrameLayout {
 
     private void showMouseSettings() {
         float density = getResources().getDisplayMetrics().density;
+        int padding = Math.round(18 * density);
         LinearLayout form = new LinearLayout(activity);
         form.setOrientation(LinearLayout.VERTICAL);
-        int padding = Math.round(18 * density);
         form.setPadding(padding, padding, padding, padding);
+        form.setBackground(surfaceBackground(0xFF3A3D45, 0.30f, density));
 
-        TextView preview = new TextView(activity);
-        preview.setText(R.string.pojav_controls_mouse_preview);
-        preview.setTextColor(0xFFEAFBF3);
-        preview.setTextSize(15);
-        preview.setGravity(Gravity.CENTER);
-        preview.setBackgroundColor(0xFF283238);
-        form.addView(preview, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(58 * density)));
+        TextView previewLabel = new TextView(activity);
+        previewLabel.setText(R.string.pojav_controls_mouse_preview);
+        previewLabel.setTextColor(0xFFE7E9EE);
+        previewLabel.setTextSize(14);
+        form.addView(previewLabel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(34 * density)));
 
-        TextView modeLabel = new TextView(activity);
-        modeLabel.setText(R.string.pojav_controls_cursor_mode);
-        modeLabel.setTextColor(0xFFB8C0C8);
-        modeLabel.setTextSize(12);
-        modeLabel.setPadding(0, Math.round(12 * density), 0, 0);
+        mousePreview = new ImageView(activity);
+        mousePreview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        mousePreview.setPadding(padding, padding, padding, padding);
+        mousePreview.setBackground(surfaceBackground(0xFF4A4D56, 0.30f, density));
+        mousePreview.setImageResource(org.levimc.pojavcontrols.R.drawable.ic_virtual_cursor);
+        form.addView(mousePreview, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(118 * density)));
+        updateMousePreview(profile.virtualMouseImageUri);
+
+        TextView modeLabel = settingsLabel(R.string.pojav_controls_cursor_mode, density);
         form.addView(modeLabel);
-
         RadioGroup cursorModes = new RadioGroup(activity);
         RadioButton followFinger = new RadioButton(activity);
         followFinger.setId(View.generateViewId());
         followFinger.setText(R.string.pojav_controls_cursor_follow);
-        followFinger.setTextColor(0xFFEAFBF3);
+        followFinger.setTextColor(0xFFE7E9EE);
         cursorModes.addView(followFinger);
         RadioButton relativeCursor = new RadioButton(activity);
         relativeCursor.setId(View.generateViewId());
         relativeCursor.setText(R.string.pojav_controls_cursor_relative);
-        relativeCursor.setTextColor(0xFFEAFBF3);
+        relativeCursor.setTextColor(0xFFE7E9EE);
         cursorModes.addView(relativeCursor);
         cursorModes.check(profile.virtualMouseMode == CustomControls.CURSOR_MODE_RELATIVE
                 ? relativeCursor.getId() : followFinger.getId());
         form.addView(cursorModes);
 
-        TextView value = new TextView(activity);
-        value.setTextColor(0xFFB8C0C8);
-        value.setGravity(Gravity.CENTER_VERTICAL);
-        form.addView(value, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(38 * density)));
-
+        TextView scaleValue = settingsLabel(R.string.pojav_controls_mouse_scale, density);
+        form.addView(scaleValue);
         SeekBar scale = new SeekBar(activity);
         scale.setMax(180);
         scale.setProgress(Math.round((profile.virtualMouseScale - 0.2f) * 100f));
         form.addView(scale, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
-        Runnable updateValue = () -> value.setText(activity.getString(R.string.pojav_controls_mouse_scale)
-                + ": " + Math.round((0.2f + scale.getProgress() / 100f) * 100f) + "%");
+        Runnable updateScale = () -> {
+            int percent = Math.round((0.2f + scale.getProgress() / 100f) * 100f);
+            scaleValue.setText(activity.getString(R.string.pojav_controls_mouse_scale) + ": " + percent + "%");
+            profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
+            profile.normalize();
+            saveCurrent(false);
+        };
         scale.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { updateValue.run(); }
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { updateScale.run(); }
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {}
         });
-        updateValue.run();
+        updateScale.run();
 
-        Button choose = new Button(activity);
-        choose.setText(R.string.pojav_controls_choose_image);
-        choose.setAllCaps(false);
+        Button choose = settingsButton(R.string.pojav_controls_choose_image, density);
         choose.setOnClickListener(view -> startCursorImagePick());
         form.addView(choose);
 
-        TextView frameSlotLabel = new TextView(activity);
-        frameSlotLabel.setText(R.string.pojav_controls_cursor_frame_slot);
-        frameSlotLabel.setTextColor(0xFFB8C0C8);
-        form.addView(frameSlotLabel);
-
-        Spinner frameSlot = new Spinner(activity);
-        String[] frameEntries = new String[CURSOR_FRAME_COUNT];
-        for (int i = 0; i < CURSOR_FRAME_COUNT; i++) frameEntries[i] = "Frame " + (i + 1);
-        frameSlot.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item, frameEntries));
-        form.addView(frameSlot);
-
-        Button chooseFrame = new Button(activity);
-        chooseFrame.setText(R.string.pojav_controls_choose_frame);
-        chooseFrame.setAllCaps(false);
-        chooseFrame.setOnClickListener(view -> {
-            pendingCursorFrameSlot = frameSlot.getSelectedItemPosition();
-            startCursorFramePick(pendingCursorFrameSlot);
-        });
-        form.addView(chooseFrame);
-
-        TextView animationLabel = new TextView(activity);
-        animationLabel.setText(R.string.pojav_controls_cursor_animation_mode);
-        animationLabel.setTextColor(0xFFB8C0C8);
-        form.addView(animationLabel);
-
-        Spinner animationMode = new Spinner(activity);
-        animationMode.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
-                new String[]{activity.getString(R.string.pojav_controls_cursor_mode_auto),
-                        activity.getString(R.string.pojav_controls_cursor_mode_gif),
-                        activity.getString(R.string.pojav_controls_cursor_mode_sprite),
-                        activity.getString(R.string.pojav_controls_cursor_mode_frames)}));
-        animationMode.setSelection(Math.max(0, Math.min(3, profile.virtualMouseAnimationMode)));
-        form.addView(animationMode);
-
-        TextView columnsValue = new TextView(activity);
-        columnsValue.setTextColor(0xFFB8C0C8);
-        form.addView(columnsValue);
-        SeekBar columns = new SeekBar(activity);
-        columns.setMax(15);
-        columns.setProgress(profile.virtualMouseSpriteColumns - 1);
-        form.addView(columns);
-        columns.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + (progress + 1));
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
-        });
-        columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + profile.virtualMouseSpriteColumns);
-
-        TextView rowsValue = new TextView(activity);
-        rowsValue.setTextColor(0xFFB8C0C8);
-        form.addView(rowsValue);
-        SeekBar rows = new SeekBar(activity);
-        rows.setMax(15);
-        rows.setProgress(profile.virtualMouseSpriteRows - 1);
-        form.addView(rows);
-        rows.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + (progress + 1));
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
-        });
-        rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + profile.virtualMouseSpriteRows);
-
-        TextView durationValue = new TextView(activity);
-        durationValue.setTextColor(0xFFB8C0C8);
-        form.addView(durationValue);
-        SeekBar duration = new SeekBar(activity);
-        duration.setMax(1970);
-        duration.setProgress(profile.virtualMouseFrameDurationMs - 30);
-        form.addView(duration);
-        duration.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + (progress + 30));
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
-        });
-        durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + profile.virtualMouseFrameDurationMs);
-
-        Button clear = new Button(activity);
-        clear.setText(R.string.pojav_controls_clear_image);
-        clear.setAllCaps(false);
+        Button clear = settingsButton(R.string.pojav_controls_clear_image, density);
         clear.setOnClickListener(view -> {
             profile.virtualMouseImageUri = "";
+            if (mousePreview != null) mousePreview.setImageResource(org.levimc.pojavcontrols.R.drawable.ic_virtual_cursor);
             saveCurrent(false);
-            Toast.makeText(activity, R.string.pojav_controls_image_cleared, Toast.LENGTH_SHORT).show();
         });
         form.addView(clear);
 
-        Button chooseSound = new Button(activity);
-        chooseSound.setText(R.string.pojav_controls_choose_sound);
-        chooseSound.setAllCaps(false);
+        Button chooseSound = settingsButton(R.string.pojav_controls_choose_sound, density);
         chooseSound.setOnClickListener(view -> startCursorSoundPick());
         form.addView(chooseSound);
 
-        Button clearSound = new Button(activity);
-        clearSound.setText(R.string.pojav_controls_clear_sound);
-        clearSound.setAllCaps(false);
+        Button clearSound = settingsButton(R.string.pojav_controls_clear_sound, density);
         clearSound.setOnClickListener(view -> {
             profile.virtualMouseClickSoundUri = "";
             saveCurrent(false);
-            Toast.makeText(activity, R.string.pojav_controls_sound_cleared, Toast.LENGTH_SHORT).show();
         });
         form.addView(clearSound);
 
         ScrollView scroll = new ScrollView(activity);
+        scroll.setBackgroundColor(0xFF2B2E35);
         scroll.addView(form, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
 
@@ -417,27 +324,57 @@ final class PojavControlsEditorView extends FrameLayout {
                 .setTitle(R.string.pojav_controls_mouse_settings)
                 .setView(scroll)
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                    profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
-                    profile.virtualMouseAnimationMode = animationMode.getSelectedItemPosition();
-                    profile.virtualMouseSpriteColumns = columns.getProgress() + 1;
-                    profile.virtualMouseSpriteRows = rows.getProgress() + 1;
-                    profile.virtualMouseFrameDurationMs = duration.getProgress() + 30;
                     profile.virtualMouseMode = cursorModes.getCheckedRadioButtonId() == relativeCursor.getId()
                             ? CustomControls.CURSOR_MODE_RELATIVE : CustomControls.CURSOR_MODE_FOLLOW_FINGER;
                     profile.normalize();
                     saveCurrent(false);
                     canvas.rebuild();
+                    mousePreview = null;
                 })
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(android.R.string.cancel, (dialog, which) -> mousePreview = null)
                 .show();
     }
 
-    private void startCursorFramePick(int slot) {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("image/*");
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        activity.startActivityForResult(intent, REQUEST_CURSOR_FRAME_BASE + Math.max(0, Math.min(CURSOR_FRAME_COUNT - 1, slot)));
+    private TextView settingsLabel(int resource, float density) {
+        TextView label = new TextView(activity);
+        label.setText(resource);
+        label.setTextColor(0xFFB8BDC7);
+        label.setTextSize(12);
+        label.setPadding(0, Math.round(12 * density), 0, Math.round(4 * density));
+        return label;
+    }
+
+    private Button settingsButton(int resource, float density) {
+        Button button = new Button(activity);
+        button.setText(resource);
+        button.setTextColor(0xFFE7E9EE);
+        button.setTextSize(12);
+        button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setPadding(Math.round(14 * density), 0, Math.round(14 * density), 0);
+        button.setBackground(surfaceBackground(0xFF4A4D56, 0.30f, density));
+        button.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(46 * density)));
+        return button;
+    }
+
+    private GradientDrawable surfaceBackground(int color, float rounding, float density) {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color);
+        background.setCornerRadius(Math.max(12f, 72f * density * rounding));
+        return background;
+    }
+
+    private void updateMousePreview(String imageUri) {
+        if (mousePreview == null || imageUri == null || imageUri.isBlank()) return;
+        try (InputStream input = activity.getContentResolver().openInputStream(Uri.parse(imageUri))) {
+            if (input != null) {
+                android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(input);
+                if (bitmap != null) mousePreview.setImageBitmap(bitmap);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void startCursorSoundPick() {
