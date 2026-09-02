@@ -3,6 +3,7 @@ package org.levimc.pojavcontrols;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
@@ -13,7 +14,11 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -29,6 +34,10 @@ import java.util.List;
 final class PojavControlsEditorView extends FrameLayout {
     static final int REQUEST_IMPORT = 4101;
     static final int REQUEST_EXPORT = 4102;
+    static final int REQUEST_CURSOR_IMAGE = 4103;
+    static final int REQUEST_CURSOR_SOUND = 4104;
+    static final int REQUEST_CURSOR_FRAME_BASE = 4200;
+    static final int CURSOR_FRAME_COUNT = 6;
 
     private final Activity activity;
     private final Runnable closeAction;
@@ -38,6 +47,7 @@ final class PojavControlsEditorView extends FrameLayout {
     private final ControlEditorCanvas canvas;
     private final Spinner profileSpinner;
     private boolean profileSpinnerBusy;
+    private int pendingCursorFrameSlot;
 
     PojavControlsEditorView(Activity activity, Runnable closeAction) {
         super(activity);
@@ -48,6 +58,7 @@ final class PojavControlsEditorView extends FrameLayout {
         profile = repository.load(profileName);
         setClickable(true);
         setFocusable(true);
+        setBackgroundColor(Color.TRANSPARENT);
 
         canvas = new ControlEditorCanvas(activity, this::showProperties);
         canvas.setProfile(profile);
@@ -57,19 +68,24 @@ final class PojavControlsEditorView extends FrameLayout {
         HorizontalScrollView toolbarScroll = new HorizontalScrollView(activity);
         toolbarScroll.setHorizontalScrollBarEnabled(false);
         toolbarScroll.setFillViewport(true);
-        toolbarScroll.setBackgroundColor(0xE6202428);
+        GradientDrawable toolbarBackground = new GradientDrawable();
+        toolbarBackground.setColor(0xE02F343A);
+        toolbarBackground.setCornerRadius(18 * density);
+        toolbarScroll.setBackground(toolbarBackground);
         LinearLayout toolbar = new LinearLayout(activity);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.setPadding(Math.round(8 * density), Math.round(4 * density),
-                Math.round(8 * density), Math.round(4 * density));
+        toolbar.setPadding(Math.round(12 * density), Math.round(8 * density),
+                Math.round(12 * density), Math.round(8 * density));
 
         TextView title = new TextView(activity);
         title.setText(R.string.pojav_controls_editor);
         title.setTextColor(Color.WHITE);
-        title.setTextSize(18);
+        title.setTextSize(17);
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        title.setSingleLine(true);
         title.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.addView(title, new LinearLayout.LayoutParams(Math.round(160 * density),
+        toolbar.addView(title, new LinearLayout.LayoutParams(Math.round(124 * density),
                 Math.round(48 * density)));
 
         profileSpinner = new Spinner(activity);
@@ -95,6 +111,7 @@ final class PojavControlsEditorView extends FrameLayout {
         });
 
         toolbar.addView(toolbarButton(R.string.pojav_controls_profiles, view -> showProfilesDialog()));
+        toolbar.addView(toolbarButton(R.string.pojav_controls_mouse_settings, view -> showMouseSettings()));
         Button hide = toolbarButton(R.string.pojav_controls_hide_toolbar, null);
         toolbar.addView(hide);
         toolbar.addView(toolbarButton(R.string.pojav_controls_add, view -> showAddDialog()));
@@ -104,9 +121,11 @@ final class PojavControlsEditorView extends FrameLayout {
         toolbar.addView(toolbarButton(R.string.pojav_controls_close, view -> close()));
 
         toolbarScroll.addView(toolbar, new HorizontalScrollView.LayoutParams(
-                HorizontalScrollView.LayoutParams.WRAP_CONTENT, Math.round(56 * density)));
-        LayoutParams toolbarParams = new LayoutParams(LayoutParams.MATCH_PARENT, Math.round(56 * density));
+                HorizontalScrollView.LayoutParams.WRAP_CONTENT, Math.round(64 * density)));
+        LayoutParams toolbarParams = new LayoutParams(LayoutParams.MATCH_PARENT, Math.round(64 * density));
         toolbarParams.gravity = Gravity.TOP;
+        toolbarParams.setMargins(Math.round(8 * density), Math.round(8 * density),
+                Math.round(8 * density), 0);
         addView(toolbarScroll, toolbarParams);
 
         Button showToolbar = toolbarButton(R.string.pojav_controls_show_toolbar, null);
@@ -114,7 +133,7 @@ final class PojavControlsEditorView extends FrameLayout {
         showToolbar.setGravity(Gravity.CENTER);
         showToolbar.setPadding(Math.round(8 * density), 0, Math.round(8 * density), 0);
         showToolbar.setVisibility(GONE);
-        showToolbar.setBackgroundColor(0xCC202428);
+        showToolbar.setBackgroundColor(0xD92F343A);
         LayoutParams showParams = new LayoutParams(Math.round(120 * density), Math.round(48 * density));
         showParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         addView(showToolbar, showParams);
@@ -135,7 +154,8 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT) return false;
+        boolean frameRequest = requestCode >= REQUEST_CURSOR_FRAME_BASE && requestCode < REQUEST_CURSOR_FRAME_BASE + CURSOR_FRAME_COUNT;
+        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND && !frameRequest) return false;
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri uri = data.getData();
         try {
@@ -154,6 +174,34 @@ final class PojavControlsEditorView extends FrameLayout {
                 reloadProfileSpinner(profileName);
                 notifyProfileChanged();
                 Toast.makeText(activity, R.string.pojav_controls_imported, Toast.LENGTH_SHORT).show();
+            } else if (requestCode == REQUEST_CURSOR_IMAGE) {
+                int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+                    try {
+                        activity.getContentResolver().takePersistableUriPermission(uri, flags);
+                    } catch (SecurityException ignored) {
+                    }
+                }
+                profile.virtualMouseImageUri = uri.toString();
+                saveCurrent(false);
+                Toast.makeText(activity, R.string.pojav_controls_image_selected, Toast.LENGTH_SHORT).show();
+            } else if (frameRequest) {
+                profile.normalize();
+                int slot = requestCode - REQUEST_CURSOR_FRAME_BASE;
+                profile.virtualMouseFrameUris.set(slot, uri.toString());
+                saveCurrent(false);
+                Toast.makeText(activity, R.string.pojav_controls_frame_selected, Toast.LENGTH_SHORT).show();
+            } else if (requestCode == REQUEST_CURSOR_SOUND) {
+                int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+                    try {
+                        activity.getContentResolver().takePersistableUriPermission(uri, flags);
+                    } catch (SecurityException ignored) {
+                    }
+                }
+                profile.virtualMouseClickSoundUri = uri.toString();
+                saveCurrent(false);
+                Toast.makeText(activity, R.string.pojav_controls_sound_selected, Toast.LENGTH_SHORT).show();
             } else {
                 saveCurrent(false);
                 try (OutputStream output = activity.getContentResolver().openOutputStream(uri, "wt")) {
@@ -168,13 +216,244 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     private Button toolbarButton(int text, View.OnClickListener listener) {
+        float density = getResources().getDisplayMetrics().density;
         Button button = new Button(activity);
         button.setText(text);
-        button.setTextColor(Color.WHITE);
+        button.setTextColor(0xFFEAFBF3);
         button.setTextSize(12);
+        button.setGravity(Gravity.CENTER);
         button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setPadding(Math.round(14 * density), 0, Math.round(14 * density), 0);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFF2B343A);
+        background.setCornerRadius(8 * density);
+        background.setStroke(Math.max(1, Math.round(density)), 0xFF46545C);
+        button.setBackground(background);
+        button.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, Math.round(44 * density)));
         button.setOnClickListener(listener);
         return button;
+    }
+
+    private void showMouseSettings() {
+        float density = getResources().getDisplayMetrics().density;
+        LinearLayout form = new LinearLayout(activity);
+        form.setOrientation(LinearLayout.VERTICAL);
+        int padding = Math.round(18 * density);
+        form.setPadding(padding, padding, padding, padding);
+
+        TextView preview = new TextView(activity);
+        preview.setText(R.string.pojav_controls_mouse_preview);
+        preview.setTextColor(0xFFEAFBF3);
+        preview.setTextSize(15);
+        preview.setGravity(Gravity.CENTER);
+        preview.setBackgroundColor(0xFF283238);
+        form.addView(preview, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(58 * density)));
+
+        TextView modeLabel = new TextView(activity);
+        modeLabel.setText(R.string.pojav_controls_cursor_mode);
+        modeLabel.setTextColor(0xFFB8C0C8);
+        modeLabel.setTextSize(12);
+        modeLabel.setPadding(0, Math.round(12 * density), 0, 0);
+        form.addView(modeLabel);
+
+        RadioGroup cursorModes = new RadioGroup(activity);
+        RadioButton followFinger = new RadioButton(activity);
+        followFinger.setId(View.generateViewId());
+        followFinger.setText(R.string.pojav_controls_cursor_follow);
+        followFinger.setTextColor(0xFFEAFBF3);
+        cursorModes.addView(followFinger);
+        RadioButton relativeCursor = new RadioButton(activity);
+        relativeCursor.setId(View.generateViewId());
+        relativeCursor.setText(R.string.pojav_controls_cursor_relative);
+        relativeCursor.setTextColor(0xFFEAFBF3);
+        cursorModes.addView(relativeCursor);
+        cursorModes.check(profile.virtualMouseMode == CustomControls.CURSOR_MODE_RELATIVE
+                ? relativeCursor.getId() : followFinger.getId());
+        form.addView(cursorModes);
+
+        TextView value = new TextView(activity);
+        value.setTextColor(0xFFB8C0C8);
+        value.setGravity(Gravity.CENTER_VERTICAL);
+        form.addView(value, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(38 * density)));
+
+        SeekBar scale = new SeekBar(activity);
+        scale.setMax(180);
+        scale.setProgress(Math.round((profile.virtualMouseScale - 0.2f) * 100f));
+        form.addView(scale, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
+        Runnable updateValue = () -> value.setText(activity.getString(R.string.pojav_controls_mouse_scale)
+                + ": " + Math.round((0.2f + scale.getProgress() / 100f) * 100f) + "%");
+        scale.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { updateValue.run(); }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        updateValue.run();
+
+        Button choose = new Button(activity);
+        choose.setText(R.string.pojav_controls_choose_image);
+        choose.setAllCaps(false);
+        choose.setOnClickListener(view -> startCursorImagePick());
+        form.addView(choose);
+
+        TextView frameSlotLabel = new TextView(activity);
+        frameSlotLabel.setText(R.string.pojav_controls_cursor_frame_slot);
+        frameSlotLabel.setTextColor(0xFFB8C0C8);
+        form.addView(frameSlotLabel);
+
+        Spinner frameSlot = new Spinner(activity);
+        String[] frameEntries = new String[CURSOR_FRAME_COUNT];
+        for (int i = 0; i < CURSOR_FRAME_COUNT; i++) frameEntries[i] = "Frame " + (i + 1);
+        frameSlot.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item, frameEntries));
+        form.addView(frameSlot);
+
+        Button chooseFrame = new Button(activity);
+        chooseFrame.setText(R.string.pojav_controls_choose_frame);
+        chooseFrame.setAllCaps(false);
+        chooseFrame.setOnClickListener(view -> {
+            pendingCursorFrameSlot = frameSlot.getSelectedItemPosition();
+            startCursorFramePick(pendingCursorFrameSlot);
+        });
+        form.addView(chooseFrame);
+
+        TextView animationLabel = new TextView(activity);
+        animationLabel.setText(R.string.pojav_controls_cursor_animation_mode);
+        animationLabel.setTextColor(0xFFB8C0C8);
+        form.addView(animationLabel);
+
+        Spinner animationMode = new Spinner(activity);
+        animationMode.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{activity.getString(R.string.pojav_controls_cursor_mode_auto),
+                        activity.getString(R.string.pojav_controls_cursor_mode_gif),
+                        activity.getString(R.string.pojav_controls_cursor_mode_sprite),
+                        activity.getString(R.string.pojav_controls_cursor_mode_frames)}));
+        animationMode.setSelection(Math.max(0, Math.min(3, profile.virtualMouseAnimationMode)));
+        form.addView(animationMode);
+
+        TextView columnsValue = new TextView(activity);
+        columnsValue.setTextColor(0xFFB8C0C8);
+        form.addView(columnsValue);
+        SeekBar columns = new SeekBar(activity);
+        columns.setMax(15);
+        columns.setProgress(profile.virtualMouseSpriteColumns - 1);
+        form.addView(columns);
+        columns.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + (progress + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + profile.virtualMouseSpriteColumns);
+
+        TextView rowsValue = new TextView(activity);
+        rowsValue.setTextColor(0xFFB8C0C8);
+        form.addView(rowsValue);
+        SeekBar rows = new SeekBar(activity);
+        rows.setMax(15);
+        rows.setProgress(profile.virtualMouseSpriteRows - 1);
+        form.addView(rows);
+        rows.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + (progress + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + profile.virtualMouseSpriteRows);
+
+        TextView durationValue = new TextView(activity);
+        durationValue.setTextColor(0xFFB8C0C8);
+        form.addView(durationValue);
+        SeekBar duration = new SeekBar(activity);
+        duration.setMax(1970);
+        duration.setProgress(profile.virtualMouseFrameDurationMs - 30);
+        form.addView(duration);
+        duration.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + (progress + 30));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + profile.virtualMouseFrameDurationMs);
+
+        Button clear = new Button(activity);
+        clear.setText(R.string.pojav_controls_clear_image);
+        clear.setAllCaps(false);
+        clear.setOnClickListener(view -> {
+            profile.virtualMouseImageUri = "";
+            saveCurrent(false);
+            Toast.makeText(activity, R.string.pojav_controls_image_cleared, Toast.LENGTH_SHORT).show();
+        });
+        form.addView(clear);
+
+        Button chooseSound = new Button(activity);
+        chooseSound.setText(R.string.pojav_controls_choose_sound);
+        chooseSound.setAllCaps(false);
+        chooseSound.setOnClickListener(view -> startCursorSoundPick());
+        form.addView(chooseSound);
+
+        Button clearSound = new Button(activity);
+        clearSound.setText(R.string.pojav_controls_clear_sound);
+        clearSound.setAllCaps(false);
+        clearSound.setOnClickListener(view -> {
+            profile.virtualMouseClickSoundUri = "";
+            saveCurrent(false);
+            Toast.makeText(activity, R.string.pojav_controls_sound_cleared, Toast.LENGTH_SHORT).show();
+        });
+        form.addView(clearSound);
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.addView(form, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
+
+        new AlertDialog.Builder(activity)
+                .setTitle(R.string.pojav_controls_mouse_settings)
+                .setView(scroll)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
+                    profile.virtualMouseAnimationMode = animationMode.getSelectedItemPosition();
+                    profile.virtualMouseSpriteColumns = columns.getProgress() + 1;
+                    profile.virtualMouseSpriteRows = rows.getProgress() + 1;
+                    profile.virtualMouseFrameDurationMs = duration.getProgress() + 30;
+                    profile.virtualMouseMode = cursorModes.getCheckedRadioButtonId() == relativeCursor.getId()
+                            ? CustomControls.CURSOR_MODE_RELATIVE : CustomControls.CURSOR_MODE_FOLLOW_FINGER;
+                    profile.normalize();
+                    saveCurrent(false);
+                    canvas.rebuild();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void startCursorFramePick(int slot) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(intent, REQUEST_CURSOR_FRAME_BASE + Math.max(0, Math.min(CURSOR_FRAME_COUNT - 1, slot)));
+    }
+
+    private void startCursorSoundPick() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("audio/ogg");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(intent, REQUEST_CURSOR_SOUND);
+    }
+
+    private void startCursorImagePick() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(intent, REQUEST_CURSOR_IMAGE);
     }
 
     private void showAddDialog() {
@@ -262,8 +541,13 @@ final class PojavControlsEditorView extends FrameLayout {
         ScrollView scroll = new ScrollView(activity);
         LinearLayout form = new LinearLayout(activity);
         form.setOrientation(LinearLayout.VERTICAL);
-        int padding = Math.round(16 * density);
+        int padding = Math.round(18 * density);
         form.setPadding(padding, padding, padding, padding);
+        GradientDrawable panelBackground = new GradientDrawable();
+        panelBackground.setColor(0xEE2F343A);
+        panelBackground.setCornerRadius(22 * density);
+        form.setBackground(panelBackground);
+        scroll.setBackgroundColor(Color.TRANSPARENT);
 
         EditText name = field(form, R.string.pojav_controls_name, target.data.name);
         Button mapping = new Button(activity);
@@ -279,18 +563,73 @@ final class PojavControlsEditorView extends FrameLayout {
 
         EditText x = field(form, R.string.pojav_controls_position_x, target.data.dynamicX);
         EditText y = field(form, R.string.pojav_controls_position_y, target.data.dynamicY);
-        EditText width = field(form, R.string.pojav_controls_width, Float.toString(target.data.width));
-        EditText height = field(form, R.string.pojav_controls_height, Float.toString(target.data.height));
-        EditText opacity = field(form, R.string.pojav_controls_opacity,
-                Integer.toString(Math.round(target.data.opacity * 100f)));
+        SeekBar width = slider(form, R.string.pojav_controls_width, target.data.width, 400, "dp");
+        SeekBar height = slider(form, R.string.pojav_controls_height, target.data.height, 400, "dp");
+        bindLiveSlider(width, "dp", () -> {
+            target.data.width = width.getProgress();
+            target.data.normalize();
+            canvas.rebuild();
+        });
+        bindLiveSlider(height, "dp", () -> {
+            target.data.height = height.getProgress();
+            target.data.normalize();
+            canvas.rebuild();
+        });
+        addLabel(form, R.string.pojav_controls_opacity);
+        SeekBar opacity = new SeekBar(activity);
+        opacity.setMax(100);
+        opacity.setProgress(Math.round(target.data.opacity * 100f));
+        form.addView(opacity, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
+        TextView opacityValue = sliderValue(form, Math.round(target.data.opacity * 100f), "%");
+        opacity.setTag(opacityValue);
+        opacity.setOnSeekBarChangeListener(sliderListener(opacityValue, "%"));
+        bindLiveSlider(opacity, "%", () -> {
+            target.data.opacity = opacity.getProgress() / 100f;
+            canvas.rebuild();
+        });
         EditText background = field(form, R.string.pojav_controls_background,
                 String.format("#%08X", target.data.bgColor));
         EditText stroke = field(form, R.string.pojav_controls_stroke,
                 String.format("#%08X", target.data.strokeColor));
-        EditText strokeWidth = field(form, R.string.pojav_controls_stroke_width,
-                Float.toString(target.data.strokeWidth));
-        EditText radius = field(form, R.string.pojav_controls_corner_radius,
-                Float.toString(target.data.cornerRadius));
+        SeekBar strokeWidth = slider(form, R.string.pojav_controls_stroke_width,
+                target.data.strokeWidth, 20, "dp");
+        bindLiveSlider(strokeWidth, "dp", () -> {
+            target.data.strokeWidth = strokeWidth.getProgress();
+            canvas.rebuild();
+        });
+        addLabel(form, R.string.pojav_controls_corner_radius);
+        SeekBar radius = new SeekBar(activity);
+        radius.setMax(100);
+        radius.setProgress(Math.round(target.data.cornerRadius));
+        form.addView(radius, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
+        TextView radiusValue = sliderValue(form, Math.round(target.data.cornerRadius), "%");
+        radius.setTag(radiusValue);
+        radius.setOnSeekBarChangeListener(sliderListener(radiusValue, "%"));
+        bindLiveSlider(radius, "%", () -> {
+            target.data.cornerRadius = radius.getProgress();
+            canvas.rebuild();
+        });
+        addLabel(form, R.string.pojav_controls_shape);
+        Spinner shape = new Spinner(activity);
+        String[] shapeNames = new String[]{
+                activity.getString(R.string.pojav_controls_shape_rounded),
+                activity.getString(R.string.pojav_controls_shape_pill),
+                activity.getString(R.string.pojav_controls_shape_square),
+                activity.getString(R.string.pojav_controls_shape_circle)
+        };
+        shape.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item, shapeNames));
+        shape.setSelection(Math.max(0, Math.min(ControlData.SHAPE_CIRCLE, target.data.shape)));
+        form.addView(shape);
+        shape.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (target.data.shape == position) return;
+                target.data.shape = position;
+                canvas.rebuild();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
         CheckBox toggle = check(form, R.string.pojav_controls_toggle, target.data.isToggle);
         CheckBox swipeable = check(form, R.string.pojav_controls_swipeable, target.data.isSwipeable);
         CheckBox passThrough = check(form, R.string.pojav_controls_pass_through, target.data.passThruEnabled);
@@ -346,13 +685,14 @@ final class PojavControlsEditorView extends FrameLayout {
                     target.data.keycodes = Arrays.copyOf(selectedCodes, 1);
                     target.data.dynamicX = x.getText().toString().trim();
                     target.data.dynamicY = y.getText().toString().trim();
-                    target.data.width = number(width, target.data.width);
-                    target.data.height = number(height, target.data.height);
-                    target.data.opacity = number(opacity, target.data.opacity * 100f) / 100f;
+                    target.data.width = width.getProgress();
+                    target.data.height = height.getProgress();
+                    target.data.opacity = opacity.getProgress() / 100f;
                     target.data.bgColor = color(background, target.data.bgColor);
                     target.data.strokeColor = color(stroke, target.data.strokeColor);
-                    target.data.strokeWidth = number(strokeWidth, target.data.strokeWidth);
-                    target.data.cornerRadius = number(radius, target.data.cornerRadius);
+                    target.data.strokeWidth = strokeWidth.getProgress();
+                    target.data.cornerRadius = radius.getProgress();
+                    target.data.shape = shape.getSelectedItemPosition();
                     target.data.isToggle = toggle.isChecked();
                     target.data.isSwipeable = swipeable.isChecked();
                     target.data.passThruEnabled = passThrough.isChecked();
@@ -380,6 +720,9 @@ final class PojavControlsEditorView extends FrameLayout {
             dialog.dismiss();
         });
         dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        }
     }
 
     private void showMappingDialog(int[] selectedCodes, Button mapping) {
@@ -407,6 +750,51 @@ final class PojavControlsEditorView extends FrameLayout {
                 ? KeyMapper.GLFW_KEY_UNKNOWN : keycodes[0];
         return code == KeyMapper.GLFW_KEY_UNKNOWN
                 ? activity.getString(R.string.pojav_controls_mapping) : KeyMapper.nameOf(code);
+    }
+
+    private SeekBar slider(LinearLayout form, int label, float initial, int max, String suffix) {
+        addLabel(form, label);
+        SeekBar bar = new SeekBar(activity);
+        bar.setMax(max);
+        bar.setProgress(Math.max(0, Math.min(max, Math.round(initial))));
+        form.addView(bar, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * getResources().getDisplayMetrics().density)));
+        TextView value = sliderValue(form, bar.getProgress(), suffix);
+        bar.setTag(value);
+        bar.setOnSeekBarChangeListener(sliderListener(value, suffix));
+        return bar;
+    }
+
+    private void bindLiveSlider(SeekBar bar, String suffix, Runnable action) {
+        TextView value = (TextView) bar.getTag();
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar slider, int progress, boolean fromUser) {
+                value.setText(progress + suffix);
+                action.run();
+            }
+            @Override public void onStartTrackingTouch(SeekBar slider) {}
+            @Override public void onStopTrackingTouch(SeekBar slider) {}
+        });
+    }
+
+    private TextView sliderValue(LinearLayout form, int value, String suffix) {
+        TextView result = new TextView(activity);
+        result.setText(value + suffix);
+        result.setTextColor(0xFFB8C0C8);
+        result.setGravity(Gravity.CENTER_VERTICAL);
+        form.addView(result, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(30 * getResources().getDisplayMetrics().density)));
+        return result;
+    }
+
+    private SeekBar.OnSeekBarChangeListener sliderListener(TextView value, String suffix) {
+        return new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                value.setText(progress + suffix);
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        };
     }
 
     private EditText field(LinearLayout form, int label, String value) {

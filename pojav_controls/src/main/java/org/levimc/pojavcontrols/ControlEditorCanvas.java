@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -50,6 +51,8 @@ final class ControlEditorCanvas extends ViewGroup {
     private final EditListener listener;
     private final Map<EditorItemView, EditorTarget> targets = new HashMap<>();
     private final Paint guidePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint gridPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint hintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private CustomControls profile;
     private int guideX = NO_GUIDE;
     private int guideY = NO_GUIDE;
@@ -58,10 +61,16 @@ final class ControlEditorCanvas extends ViewGroup {
         super(context);
         this.listener = listener;
         setClipChildren(false);
-        setBackgroundColor(0x66101316);
+        setWillNotDraw(false);
+        setBackgroundColor(Color.TRANSPARENT);
         float density = getResources().getDisplayMetrics().density;
         guidePaint.setColor(0xFF4AE0A0);
         guidePaint.setStrokeWidth(Math.max(2f, density));
+        gridPaint.setColor(0x2639A0ED);
+        gridPaint.setStrokeWidth(Math.max(1f, density));
+        hintPaint.setColor(0xCCFFFFFF);
+        hintPaint.setTextSize(12f * density);
+        hintPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
     }
 
     void setProfile(CustomControls profile) {
@@ -134,6 +143,12 @@ final class ControlEditorCanvas extends ViewGroup {
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        float density = getResources().getDisplayMetrics().density;
+        float grid = Math.max(24f, 32f * density);
+        for (float x = 0; x < getWidth(); x += grid) canvas.drawLine(x, 0, x, getHeight(), gridPaint);
+        for (float y = 0; y < getHeight(); y += grid) canvas.drawLine(0, y, getWidth(), y, gridPaint);
+        canvas.drawText(getResources().getString(R.string.pojav_controls_editor_hint),
+                16f * density, 24f * density, hintPaint);
         super.dispatchDraw(canvas);
         if (guideX != NO_GUIDE) canvas.drawLine(guideX, 0, guideX, getHeight(), guidePaint);
         if (guideY != NO_GUIDE) canvas.drawLine(0, guideY, getWidth(), guideY, guidePaint);
@@ -240,6 +255,7 @@ final class ControlEditorCanvas extends ViewGroup {
         values.put("screen_height", (float) screenHeight);
         values.put("margin", 8f * density);
         values.put("preferred_scale", 100f);
+        values.put("density", density);
         return Math.round(ExpressionEvaluator.evaluate(expression, values,
                 xAxis ? (screenWidth - childWidth) / 2f : (screenHeight - childHeight) / 2f));
     }
@@ -259,6 +275,8 @@ final class ControlEditorCanvas extends ViewGroup {
             setTextColor(Color.WHITE);
             setTextSize(12);
             setGravity(Gravity.CENTER);
+            setElevation(5f * getResources().getDisplayMetrics().density);
+            setContentDescription(target.data.name);
             setPadding(4, 4, 4, 4);
             applyStyle();
         }
@@ -313,13 +331,20 @@ final class ControlEditorCanvas extends ViewGroup {
         private void applyStyle() {
             GradientDrawable background = new GradientDrawable();
             int fill = target.type == EditorTarget.JOYSTICK ? 0x6639A0ED : target.data.bgColor;
+            background.setShape(target.data.shape == ControlData.SHAPE_CIRCLE
+                    ? GradientDrawable.OVAL : GradientDrawable.RECTANGLE);
             background.setColor(fill);
             float density = getResources().getDisplayMetrics().density;
-            float radius = target.type == EditorTarget.JOYSTICK ? target.data.width * density / 2f
-                    : Math.min(target.data.width, target.data.height) * density * target.data.cornerRadius / 200f;
+            float radius;
+            if (target.type == EditorTarget.JOYSTICK || target.data.shape == ControlData.SHAPE_CIRCLE ||
+                    target.data.shape == ControlData.SHAPE_PILL) {
+                radius = Math.min(target.data.width, target.data.height) * density / 2f;
+            } else if (target.data.shape == ControlData.SHAPE_SQUARE) {
+                radius = 0f;
+            } else {
+                radius = Math.min(target.data.width, target.data.height) * density * target.data.cornerRadius / 200f;
+            }
             background.setCornerRadius(radius);
-            background.setStroke(Math.max(2, Math.round(Math.max(1f, target.data.strokeWidth) * density)),
-                    0xFF4AE0A0);
             setBackground(background);
             setAlpha(Math.max(0.25f, target.data.opacity));
         }

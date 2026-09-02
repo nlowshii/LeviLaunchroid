@@ -6,7 +6,9 @@ import android.util.AtomicFile;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -141,8 +143,8 @@ final class ControlRepository {
         byte[] data = output.toByteArray();
         if (data.length == 0 || data.length > MAX_PROFILE_BYTES) throw new IOException("Invalid profile size");
         try {
-            CustomControls controls = gson.fromJson(new String(data, StandardCharsets.UTF_8), CustomControls.class);
-            if (controls == null) throw new IOException("Invalid profile");
+            JsonElement root = JsonParser.parseString(new String(data, StandardCharsets.UTF_8));
+            CustomControls controls = ControlProfileImporter.parse(root, gson);
             controls.normalize();
             return controls;
         } catch (JsonParseException exception) {

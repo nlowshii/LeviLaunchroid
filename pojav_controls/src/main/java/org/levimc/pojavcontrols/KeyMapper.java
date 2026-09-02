@@ -5,6 +5,7 @@ import android.view.KeyEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 public final class KeyMapper {
     public static final int GLFW_KEY_UNKNOWN = 0;
@@ -268,6 +269,55 @@ public final class KeyMapper {
     public static String nameOf(int code) {
         for (Entry entry : ENTRIES) if (entry.glfwCode == code) return entry.name;
         return code == GLFW_KEY_UNKNOWN ? "None" : Integer.toString(code);
+    }
+
+    public static int fromName(String value) {
+        if (value == null) return GLFW_KEY_UNKNOWN;
+        String key = value.trim();
+        if (key.isEmpty()) return GLFW_KEY_UNKNOWN;
+        try {
+            return Integer.parseInt(key);
+        } catch (NumberFormatException ignored) {
+        }
+        String normalized = key.toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        for (Entry entry : ENTRIES) {
+            String entryName = entry.name.toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+            if (normalized.equals(entryName)) return entry.glfwCode;
+        }
+        if (normalized.startsWith("GLFW_KEY_")) {
+            String suffix = normalized.substring("GLFW_KEY_".length());
+            if (suffix.length() == 1) {
+                char valueChar = suffix.charAt(0);
+                if (valueChar >= 'A' && valueChar <= 'Z') return valueChar;
+                if (valueChar >= '0' && valueChar <= '9') return valueChar;
+            }
+            if (suffix.startsWith("F")) {
+                try {
+                    int function = Integer.parseInt(suffix.substring(1));
+                    if (function >= 1 && function <= 24) return GLFW_KEY_F1 + function - 1;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        if (normalized.startsWith("KEY_")) return fromName("GLFW_" + normalized);
+        if (normalized.equals("GLFW_MOUSE_BUTTON_1") || normalized.equals("GLFW_MOUSE_BUTTON_LEFT")) return ControlData.SPECIALBTN_MOUSEPRI;
+        if (normalized.equals("GLFW_MOUSE_BUTTON_2") || normalized.equals("GLFW_MOUSE_BUTTON_RIGHT")) return ControlData.SPECIALBTN_MOUSESEC;
+        if (normalized.equals("GLFW_MOUSE_BUTTON_3") || normalized.equals("GLFW_MOUSE_BUTTON_MIDDLE")) return ControlData.SPECIALBTN_MOUSEMID;
+        return switch (normalized) {
+            case "SPACE" -> GLFW_KEY_SPACE;
+            case "ESC", "ESCAPE" -> GLFW_KEY_ESCAPE;
+            case "RETURN", "ENTER" -> GLFW_KEY_ENTER;
+            case "SHIFT", "LEFTSHIFT" -> GLFW_KEY_LEFT_SHIFT;
+            case "CTRL", "CONTROL", "LEFTCTRL", "LEFTCONTROL" -> GLFW_KEY_LEFT_CONTROL;
+            case "ALT", "LEFTALT" -> GLFW_KEY_LEFT_ALT;
+            case "TAB" -> GLFW_KEY_TAB;
+            case "BACKSPACE", "BACK" -> GLFW_KEY_BACKSPACE;
+            case "UP" -> GLFW_KEY_UP;
+            case "DOWN" -> GLFW_KEY_DOWN;
+            case "LEFT" -> GLFW_KEY_LEFT;
+            case "RIGHT" -> GLFW_KEY_RIGHT;
+            default -> GLFW_KEY_UNKNOWN;
+        };
     }
 
     private static List<Entry> buildEntries() {
