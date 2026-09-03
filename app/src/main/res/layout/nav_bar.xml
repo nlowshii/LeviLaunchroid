@@ -4,62 +4,166 @@
     android:id="@+id/nav_bar_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:background="@drawable/bg_nav_bar">
 
-    <FrameLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:paddingStart="12dp"
         android:paddingEnd="12dp">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="start|center_vertical"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+        <ImageView
+            android:id="@+id/nav_back_button"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/ic_arrow_down"
+            android:rotation="90"
+            android:scaleType="centerInside"
+            android:clickable="true"
+            android:focusable="true"
+            app:tint="@color/text_secondary" />
+
+        <ImageView
+            android:id="@+id/nav_logo"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:src="@drawable/ic_leaf_logo"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:id="@+id/nav_app_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/misans"
+            android:text="@string/app_name"
+            android:textColor="@color/primary"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <FrameLayout
+            android:id="@+id/nav_record_container"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="4dp"
+            android:clickable="true"
+            android:contentDescription="@string/screen_recorder_notification_title"
+            android:focusable="true">
 
             <ImageView
-                android:id="@+id/nav_back_button"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginEnd="10dp"
-                android:src="@drawable/ic_arrow_down"
-                android:rotation="90"
-                android:scaleType="centerInside"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true"
+                android:id="@+id/nav_record_button"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@string/screen_recorder_notification_title"
+                android:src="@drawable/ic_record_dot"
+                app:tint="@color/text_secondary" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/nav_news_container"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="4dp"
+            android:clickable="true"
+            android:contentDescription="@string/news_title"
+            android:focusable="true">
+
+            <ImageView
+                android:id="@+id/nav_news_button"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="@string/news_title"
+                android:src="@drawable/ic_nav_news"
                 app:tint="@color/text_secondary" />
 
-            <ImageView
-                android:id="@+id/nav_logo"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:src="@drawable/ic_leaf_logo" />
+            <View
+                android:id="@+id/nav_news_badge"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="5dp"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_news_unread_dot"
+                android:visibility="gone" />
+        </FrameLayout>
 
-            <TextView
-                android:id="@+id/nav_app_name"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:fontFamily="@font/misans"
-                android:text="@string/app_name"
-                android:textColor="#8BC34A"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-        </LinearLayout>
-
-        <HorizontalScrollView
+        <Button
+            android:id="@+id/nav_sign_in_button"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="center"
-            android:layout_marginStart="24dp"
-            android:scrollbars="none"
-            android:overScrollMode="never">
+            android:layout_height="32dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:fontFamily="@font/misans"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:backgroundTint="@color/primary"
+            android:text="@string/sign_in"
+            android:textColor="@color/on_primary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            android:visibility="gone" />
+
+        <FrameLayout
+            android:id="@+id/nav_account_avatar_container"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:visibility="gone">
+
+            <com.microsoft.xbox.idp.toolkit.CircleImageView
+                android:id="@+id/nav_account_avatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/xbox_avatar"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_minecraft_cube" />
+
+            <ProgressBar
+                android:id="@+id/nav_avatar_progress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:indeterminate="true"
+                android:visibility="gone" />
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="4dp"
+        android:scrollbars="none"
+        android:overScrollMode="never">
+
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent">
+
+            <org.levimc.launcher.ui.widgets.ElasticIndicatorView
+                android:id="@+id/nav_elastic_indicator"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
 
             <LinearLayout
+                android:id="@+id/nav_tab_row"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
@@ -68,148 +172,75 @@
                 <TextView
                     android:id="@+id/nav_tab_launch"
                     android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginHorizontal="3dp"
                     android:gravity="center"
-                    android:paddingHorizontal="12dp"
+                    android:paddingHorizontal="14dp"
                     android:fontFamily="@font/misans"
                     android:text="@string/nav_launch"
                     android:textColor="@color/on_surface"
                     android:textSize="13sp"
                     android:textStyle="bold"
                     android:drawableStart="@drawable/ic_nav_launch"
-                    android:drawablePadding="5dp"
-                    android:background="?attr/selectableItemBackground" />
+                    android:drawablePadding="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
 
                 <TextView
                     android:id="@+id/nav_tab_instances"
                     android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginHorizontal="3dp"
                     android:gravity="center"
-                    android:paddingHorizontal="12dp"
+                    android:paddingHorizontal="14dp"
                     android:fontFamily="@font/misans"
                     android:text="@string/nav_instances"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:drawableStart="@drawable/ic_nav_instances"
-                    android:drawablePadding="5dp"
-                    android:background="?attr/selectableItemBackground" />
+                    android:drawablePadding="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
 
                 <TextView
                     android:id="@+id/nav_tab_about"
                     android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginHorizontal="3dp"
                     android:gravity="center"
-                    android:paddingHorizontal="12dp"
+                    android:paddingHorizontal="14dp"
                     android:fontFamily="@font/misans"
                     android:text="@string/nav_about"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:drawableStart="@drawable/ic_nav_about"
-                    android:drawablePadding="5dp"
-                    android:background="?attr/selectableItemBackground" />
+                    android:drawablePadding="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
 
                 <TextView
                     android:id="@+id/nav_tab_settings"
                     android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginHorizontal="3dp"
                     android:gravity="center"
-                    android:paddingHorizontal="12dp"
+                    android:paddingHorizontal="14dp"
                     android:fontFamily="@font/misans"
                     android:text="@string/nav_settings"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:drawableStart="@drawable/ic_nav_settings"
-                    android:drawablePadding="5dp"
-                    android:background="?attr/selectableItemBackground" />
+                    android:drawablePadding="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
 
             </LinearLayout>
-        </HorizontalScrollView>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="end|center_vertical"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <FrameLayout
-                android:id="@+id/nav_news_container"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginEnd="7dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:contentDescription="@string/news_title"
-                android:focusable="true">
-
-                <ImageView
-                    android:id="@+id/nav_news_button"
-                    android:layout_width="25dp"
-                    android:layout_height="25dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@string/news_title"
-                    android:src="@drawable/ic_nav_news"
-                    app:tint="@color/text_secondary" />
-
-                <View
-                    android:id="@+id/nav_news_badge"
-                    android:layout_width="8dp"
-                    android:layout_height="8dp"
-                    android:layout_gravity="top|end"
-                    android:layout_marginTop="5dp"
-                    android:layout_marginEnd="4dp"
-                    android:background="@drawable/bg_news_unread_dot"
-                    android:visibility="gone" />
-            </FrameLayout>
-
-            <Button
-                android:id="@+id/nav_sign_in_button"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:fontFamily="@font/misans"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:backgroundTint="@color/primary"
-                android:text="@string/sign_in"
-                android:textColor="@color/on_primary"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:textAllCaps="false"
-                android:visibility="gone" />
-
-            <FrameLayout
-                android:id="@+id/nav_account_avatar_container"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:visibility="gone">
-
-                <com.microsoft.xbox.idp.toolkit.CircleImageView
-                    android:id="@+id/nav_account_avatar"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:contentDescription="@string/xbox_avatar"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/ic_minecraft_cube" />
-
-                <ProgressBar
-                    android:id="@+id/nav_avatar_progress"
-                    style="?android:attr/progressBarStyleSmall"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:indeterminate="true"
-                    android:visibility="gone" />
-            </FrameLayout>
-
-        </LinearLayout>
-
-    </FrameLayout>
+        </FrameLayout>
+    </HorizontalScrollView>
 
     <View
         android:id="@+id/nav_divider"

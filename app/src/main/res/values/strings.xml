@@ -1024,4 +1024,7 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="news_unread_description">Launcher news, %1$d unread</string>
     <string name="news_notification_channel">Launcher news</string>
     <string name="news_notification_channel_description">New LeviLauncher announcements and important notices</string>
+    <string name="screen_recorder_notification_title">Recording screen</string>
+    <string name="screen_recorder_notification_text">Tap to stop recording</string>
+    <string name="screen_recorder_channel_name">Screen recorder</string>
 </resources>
