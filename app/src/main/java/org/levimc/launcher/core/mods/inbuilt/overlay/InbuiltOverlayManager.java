@@ -9,6 +9,7 @@ import org.levimc.launcher.core.mods.inbuilt.manager.MoreButtonsManager;
 import org.levimc.launcher.core.mods.inbuilt.model.MoreButtonConfig;
 import org.levimc.launcher.core.mods.inbuilt.model.ModIds;
 import org.levimc.launcher.core.mods.inbuilt.nativemod.PojavControlsMod;
+import org.levimc.launcher.core.screenrecord.ScreenRecorderManager;
 import org.levimc.pojavcontrols.PojavControls;
 import org.levimc.pojavcontrols.PojavControlsHost;
 
@@ -48,10 +49,18 @@ public class InbuiltOverlayManager {
     private static final int SPACING = 70;
     private static final int START_X = 50;
     private long lastVisibilityStateHash = Long.MIN_VALUE;
+    private static volatile boolean recordingBridgeRegistered = false;
 
     public InbuiltOverlayManager(Activity activity) {
         this.activity = activity;
         instance = this;
+        registerScreenRecordingBridge();
+    }
+
+    private static synchronized void registerScreenRecordingBridge() {
+        if (recordingBridgeRegistered) return;
+        recordingBridgeRegistered = true;
+        ScreenRecorderManager.getInstance().addRecordingStateListener(PojavControls::setHiddenFromRecording);
     }
 
     public static InbuiltOverlayManager getInstance() {

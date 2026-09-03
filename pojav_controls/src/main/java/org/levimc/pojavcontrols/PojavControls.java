@@ -2,8 +2,14 @@ package org.levimc.pojavcontrols;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.Region;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.view.WindowManager;
 
 import java.lang.ref.WeakReference;
 
@@ -12,8 +18,11 @@ public final class PojavControls {
 
     private static WeakReference<Activity> attachedActivity = new WeakReference<>(null);
     private static PojavControlOverlay overlay;
+    private static WindowManager.LayoutParams overlayParams;
+    private static ViewTreeObserver.OnComputeInternalInsetsListener touchRegionListener;
     private static WeakReference<Activity> editorActivity = new WeakReference<>(null);
     private static PojavControlsEditorView editor;
+    private static boolean hiddenFromRecording = false;
 
     private PojavControls() {}
 
@@ -49,6 +58,22 @@ public final class PojavControls {
         if (overlay != null) overlay.reloadProfile();
     }
 
+    public static synchronized void setHiddenFromRecording(boolean hidden) {
+        hiddenFromRecording = hidden;
+        if (overlay == null || overlayParams == null) return;
+        Activity activity = attachedActivity.get();
+        if (activity == null) return;
+        if (hidden) {
+            overlayParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;
+        } else {
+            overlayParams.flags &= ~WindowManager.LayoutParams.FLAG_SECURE;
+        }
+        try {
+            activity.getWindowManager().updateViewLayout(overlay, overlayParams);
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
     private static void attach(Activity activity, PojavControlsHost host) {
         Activity current = attachedActivity.get();
         if (overlay != null && current == activity && overlay.isAttachedToWindow()) {
@@ -57,13 +82,42 @@ public final class PojavControls {
             return;
         }
         detach();
-        View content = activity.findViewById(android.R.id.content);
-        if (!(content instanceof ViewGroup)) return;
+
         overlay = new PojavControlOverlay(activity, host);
-        ((ViewGroup) content).addView(overlay, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        overlay.bringToFront();
+
+        WindowManager windowManager = activity.getWindowManager();
+        overlayParams = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        overlayParams.token = activity.getWindow().getDecorView().getWindowToken();
+        overlayParams.gravity = Gravity.TOP | Gravity.START;
+        if (hiddenFromRecording) {
+            overlayParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;
+        }
+
+        windowManager.addView(overlay, overlayParams);
+        attachTouchableRegionTracking(overlay);
         attachedActivity = new WeakReference<>(activity);
+    }
+
+    private static void attachTouchableRegionTracking(PojavControlOverlay overlayView) {
+        touchRegionListener = insetInfo -> {
+            insetInfo.setTouchableInsets(ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
+            Region region = new Region();
+            for (int i = 0; i < overlayView.getChildCount(); i++) {
+                View child = overlayView.getChildAt(i);
+                if (child.getVisibility() != View.VISIBLE) continue;
+                Rect rect = new Rect();
+                child.getHitRect(rect);
+                region.op(rect, Region.Op.UNION);
+            }
+            insetInfo.touchableRegion.set(region);
+        };
+        overlayView.getViewTreeObserver().addOnComputeInternalInsetsListener(touchRegionListener);
     }
 
     private static synchronized void showEditor(Activity activity) {
@@ -104,10 +158,21 @@ public final class PojavControls {
         if (editor != null) editor.close();
         if (overlay != null) {
             overlay.releaseAll();
-            if (overlay.getParent() instanceof ViewGroup) ((ViewGroup) overlay.getParent()).removeView(overlay);
+            if (touchRegionListener != null) {
+                overlay.getViewTreeObserver().removeOnComputeInternalInsetsListener(touchRegionListener);
+                touchRegionListener = null;
+            }
+            Activity activity = attachedActivity.get();
+            if (activity != null) {
+                try {
+                    activity.getWindowManager().removeViewImmediate(overlay);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
             overlay.dispose();
         }
         overlay = null;
+        overlayParams = null;
         attachedActivity.clear();
     }
 }

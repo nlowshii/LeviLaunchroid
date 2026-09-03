@@ -172,32 +172,4 @@ public final class ScreenRecorderManager {
         }
         return params;
     }
-
-    public static void keepHiddenFromRecording(WindowManager windowManager, View overlayRootView, WindowManager.LayoutParams params) {
-        applySecureFlagIfRecording(params);
-        ScreenRecorderManager manager = getInstance();
-        RecordingStateListener listener = recording -> {
-            if (recording) {
-                params.flags |= WindowManager.LayoutParams.FLAG_SECURE;
-            } else {
-                params.flags &= ~WindowManager.LayoutParams.FLAG_SECURE;
-            }
-            try {
-                windowManager.updateViewLayout(overlayRootView, params);
-            } catch (IllegalArgumentException ignored) {
-            }
-        };
-        manager.addRecordingStateListener(listener);
-        overlayRootView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-            @Override
-            public void onViewAttachedToWindow(View v) {
-            }
-
-            @Override
-            public void onViewDetachedFromWindow(View v) {
-                manager.removeRecordingStateListener(listener);
-                overlayRootView.removeOnAttachStateChangeListener(this);
-            }
-        });
-    }
 }
