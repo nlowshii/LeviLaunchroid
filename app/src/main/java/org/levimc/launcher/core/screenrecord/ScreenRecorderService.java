@@ -54,8 +54,23 @@ public class ScreenRecorderService extends Service {
 
     private void startForegroundCompat() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, buildNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+            boolean canUseMediaProjectionType = Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                    || checkSelfPermission(android.Manifest.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION)
+                            == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            if (canUseMediaProjectionType) {
+                try {
+                    startForeground(NOTIFICATION_ID, buildNotification(),
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+                    return;
+                } catch (SecurityException e) {
+                    android.util.Log.w("ScreenRecorderService",
+                            "FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION rejected, falling back", e);
+                }
+            } else {
+                android.util.Log.w("ScreenRecorderService",
+                        "FOREGROUND_SERVICE_MEDIA_PROJECTION not granted, starting without type");
+            }
+            startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE);
         } else {
             startForeground(NOTIFICATION_ID, buildNotification());
         }
