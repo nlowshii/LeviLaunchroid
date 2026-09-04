@@ -19,7 +19,7 @@ public final class PojavControls {
     private static WeakReference<Activity> attachedActivity = new WeakReference<>(null);
     private static PojavControlOverlay overlay;
     private static WindowManager.LayoutParams overlayParams;
-    private static ViewTreeObserver.OnComputeInternalInsetsListener touchRegionListener;
+    private static Object touchRegionListenerProxy;
     private static WeakReference<Activity> editorActivity = new WeakReference<>(null);
     private static PojavControlsEditorView editor;
     private static boolean hiddenFromRecording = false;
@@ -105,19 +105,42 @@ public final class PojavControls {
     }
 
     private static void attachTouchableRegionTracking(PojavControlOverlay overlayView) {
-        touchRegionListener = insetInfo -> {
-            insetInfo.setTouchableInsets(ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
-            Region region = new Region();
-            for (int i = 0; i < overlayView.getChildCount(); i++) {
-                View child = overlayView.getChildAt(i);
-                if (child.getVisibility() != View.VISIBLE) continue;
-                Rect rect = new Rect();
-                child.getHitRect(rect);
-                region.op(rect, Region.Op.UNION);
-            }
-            insetInfo.touchableRegion.set(region);
-        };
-        overlayView.getViewTreeObserver().addOnComputeInternalInsetsListener(touchRegionListener);
+        try {
+            Class<?> insetsInfoClass = Class.forName("android.view.ViewTreeObserver$InternalInsetsInfo");
+            Class<?> listenerClass = Class.forName("android.view.ViewTreeObserver$OnComputeInternalInsetsListener");
+
+            java.lang.reflect.Field touchableRegionField = insetsInfoClass.getField("touchableRegion");
+            java.lang.reflect.Field touchableInsetsRegionConstant = insetsInfoClass.getField("TOUCHABLE_INSETS_REGION");
+            int regionConstant = touchableInsetsRegionConstant.getInt(null);
+            java.lang.reflect.Method setTouchableInsets = insetsInfoClass.getMethod("setTouchableInsets", int.class);
+
+            Object listenerProxy = java.lang.reflect.Proxy.newProxyInstance(
+                    listenerClass.getClassLoader(),
+                    new Class<?>[]{listenerClass},
+                    (proxy, method, args) -> {
+                        if ("onComputeInternalInsets".equals(method.getName()) && args != null && args.length == 1) {
+                            Object insetInfo = args[0];
+                            setTouchableInsets.invoke(insetInfo, regionConstant);
+                            Region region = (Region) touchableRegionField.get(insetInfo);
+                            region.setEmpty();
+                            for (int i = 0; i < overlayView.getChildCount(); i++) {
+                                View child = overlayView.getChildAt(i);
+                                if (child.getVisibility() != View.VISIBLE) continue;
+                                Rect rect = new Rect();
+                                child.getHitRect(rect);
+                                region.op(rect, Region.Op.UNION);
+                            }
+                        }
+                        return null;
+                    });
+
+            java.lang.reflect.Method addListener = ViewTreeObserver.class.getMethod(
+                    "addOnComputeInternalInsetsListener", listenerClass);
+            addListener.invoke(overlayView.getViewTreeObserver(), listenerProxy);
+            touchRegionListenerProxy = listenerProxy;
+        } catch (ReflectiveOperationException e) {
+            touchRegionListenerProxy = null;
+        }
     }
 
     private static synchronized void showEditor(Activity activity) {
@@ -158,9 +181,15 @@ public final class PojavControls {
         if (editor != null) editor.close();
         if (overlay != null) {
             overlay.releaseAll();
-            if (touchRegionListener != null) {
-                overlay.getViewTreeObserver().removeOnComputeInternalInsetsListener(touchRegionListener);
-                touchRegionListener = null;
+            if (touchRegionListenerProxy != null) {
+                try {
+                    Class<?> listenerClass = Class.forName("android.view.ViewTreeObserver$OnComputeInternalInsetsListener");
+                    java.lang.reflect.Method removeListener = ViewTreeObserver.class.getMethod(
+                            "removeOnComputeInternalInsetsListener", listenerClass);
+                    removeListener.invoke(overlay.getViewTreeObserver(), touchRegionListenerProxy);
+                } catch (ReflectiveOperationException ignored) {
+                }
+                touchRegionListenerProxy = null;
             }
             Activity activity = attachedActivity.get();
             if (activity != null) {
