@@ -37,8 +37,6 @@ import org.levimc.launcher.core.news.NewsFeed;
 import org.levimc.launcher.core.news.NewsRepository;
 import org.levimc.launcher.core.news.NewsState;
 import org.levimc.launcher.ui.animation.DynamicAnim;
-import org.levimc.launcher.core.screenrecord.ScreenRecorderManager;
-import org.levimc.launcher.core.screenrecord.ScreenRecorderService;
 import org.levimc.launcher.ui.widgets.ElasticIndicatorView;
 import org.levimc.launcher.util.AccountTextUtils;
 import org.levimc.launcher.util.OrientationPreference;
@@ -60,7 +58,6 @@ public class BaseActivity extends AppCompatActivity {
     private final OkHttpClient navAvatarClient = new OkHttpClient();
     private final ExecutorService navAccountExecutor = Executors.newSingleThreadExecutor();
     private ActivityResultLauncher<Intent> navAccountLoginLauncher;
-    private ActivityResultLauncher<Intent> screenRecordPermissionLauncher;
     private boolean newsReceiverRegistered;
     private final BroadcastReceiver newsReceiver = new BroadcastReceiver() {
         @Override
@@ -97,18 +94,6 @@ public class BaseActivity extends AppCompatActivity {
         navAccountLoginLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> handleNavAccountLoginResult(result.getResultCode(), result.getData()));
-        screenRecordPermissionLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        Intent serviceIntent = new Intent(this, ScreenRecorderService.class);
-                        serviceIntent.setAction(ScreenRecorderService.ACTION_START);
-                        serviceIntent.putExtra(ScreenRecorderService.EXTRA_RESULT_CODE, result.getResultCode());
-                        serviceIntent.putExtra(ScreenRecorderService.EXTRA_RESULT_DATA, result.getData());
-                        androidx.core.content.ContextCompat.startForegroundService(this, serviceIntent);
-                    }
-                    refreshRecordButtonState();
-                });
         hideSystemUI();
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(
                 visibility -> getWindow().getDecorView().post(this::hideSystemUI));
@@ -244,13 +229,6 @@ public class BaseActivity extends AppCompatActivity {
             });
             DynamicAnim.applyPressScale(news);
         }
-
-        View record = findViewById(R.id.nav_record_container);
-        if (record != null) {
-            record.setOnClickListener(v -> toggleScreenRecording());
-            DynamicAnim.applyPressScale(record);
-        }
-        refreshRecordButtonState();
 
         findViewById(R.id.nav_tab_launch).setOnClickListener(v -> {
             if (!(this instanceof MainActivity)) {
@@ -430,31 +408,6 @@ public class BaseActivity extends AppCompatActivity {
         }
     }
 
-    private void toggleScreenRecording() {
-        ScreenRecorderManager manager = ScreenRecorderManager.getInstance();
-        if (manager.isRecording()) {
-            Intent stopIntent = new Intent(this, ScreenRecorderService.class);
-            stopIntent.setAction(ScreenRecorderService.ACTION_STOP);
-            startService(stopIntent);
-            refreshRecordButtonState();
-        } else {
-            Intent permissionIntent = manager.createPermissionIntent(this);
-            screenRecordPermissionLauncher.launch(permissionIntent);
-        }
-    }
-
-    protected void refreshRecordButtonState() {
-        if (!navBarInjected) return;
-        View recordIcon = findViewById(R.id.nav_record_button);
-        if (recordIcon == null) return;
-        boolean recording = ScreenRecorderManager.getInstance().isRecording();
-        int color = recording
-                ? getResources().getColor(R.color.error, getTheme())
-                : getResources().getColor(R.color.text_secondary, getTheme());
-        androidx.core.widget.ImageViewCompat.setImageTintList(
-                (android.widget.ImageView) recordIcon, ColorStateList.valueOf(color));
-    }
-
     @Override
     protected void onStart() {
         super.onStart();
@@ -483,7 +436,6 @@ public class BaseActivity extends AppCompatActivity {
         getDelegate().applyDayNight();
         hideSystemUI();
         refreshNavAccountUI();
-        refreshRecordButtonState();
         refreshNewsBadge();
     }
 

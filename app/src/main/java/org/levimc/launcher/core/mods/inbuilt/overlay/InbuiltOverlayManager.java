@@ -50,6 +50,8 @@ public class InbuiltOverlayManager {
     private static final int START_X = 50;
     private long lastVisibilityStateHash = Long.MIN_VALUE;
     private static volatile boolean recordingBridgeRegistered = false;
+    private static final int RECORD_PERMISSION_REQUEST = 0x5245;
+    private android.widget.ImageView recordButton;
 
     public InbuiltOverlayManager(Activity activity) {
         this.activity = activity;
@@ -60,7 +62,11 @@ public class InbuiltOverlayManager {
     private static synchronized void registerScreenRecordingBridge() {
         if (recordingBridgeRegistered) return;
         recordingBridgeRegistered = true;
-        ScreenRecorderManager.getInstance().addRecordingStateListener(PojavControls::setHiddenFromRecording);
+        ScreenRecorderManager.getInstance().addRecordingStateListener(recording -> {
+            PojavControls.setHiddenFromRecording(recording);
+            InbuiltOverlayManager current = instance;
+            if (current != null) current.updateRecordButtonTint(recording);
+        });
     }
 
     public static InbuiltOverlayManager getInstance() {
@@ -132,6 +138,7 @@ public class InbuiltOverlayManager {
         modMenuButton = new ModMenuButton(activity);
         modMenuButton.show(START_X, nextY);
         refreshExternalButtons();
+        createRecordButtonIfNeeded();
         refreshRuntimeVisibility();
     }
 
@@ -562,6 +569,62 @@ public class InbuiltOverlayManager {
     }
 
 
+    private void createRecordButtonIfNeeded() {
+        if (recordButton != null) return;
+        android.view.View content = activity.findViewById(android.R.id.content);
+        if (!(content instanceof android.view.ViewGroup)) return;
+
+        recordButton = new android.widget.ImageView(activity);
+        recordButton.setImageResource(org.levimc.launcher.R.drawable.ic_record_dot);
+        int sizePx = (int) (28 * activity.getResources().getDisplayMetrics().density);
+        int marginPx = (int) (16 * activity.getResources().getDisplayMetrics().density);
+
+        android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(sizePx, sizePx);
+        params.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+        params.topMargin = marginPx;
+        params.rightMargin = marginPx;
+
+        recordButton.setLayoutParams(params);
+        recordButton.setOnClickListener(v -> toggleRecording());
+        updateRecordButtonTint(ScreenRecorderManager.getInstance().isRecording());
+
+        ((android.view.ViewGroup) content).addView(recordButton);
+        recordButton.bringToFront();
+    }
+
+    private void toggleRecording() {
+        ScreenRecorderManager manager = ScreenRecorderManager.getInstance();
+        if (manager.isRecording()) {
+            android.content.Intent stopIntent = new android.content.Intent(
+                    activity, org.levimc.launcher.core.screenrecord.ScreenRecorderService.class);
+            stopIntent.setAction(org.levimc.launcher.core.screenrecord.ScreenRecorderService.ACTION_STOP);
+            activity.startService(stopIntent);
+        } else {
+            activity.startActivityForResult(manager.createPermissionIntent(activity), RECORD_PERMISSION_REQUEST);
+        }
+    }
+
+    public boolean onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        if (requestCode != RECORD_PERMISSION_REQUEST) return false;
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            android.content.Intent serviceIntent = new android.content.Intent(
+                    activity, org.levimc.launcher.core.screenrecord.ScreenRecorderService.class);
+            serviceIntent.setAction(org.levimc.launcher.core.screenrecord.ScreenRecorderService.ACTION_START);
+            serviceIntent.putExtra(org.levimc.launcher.core.screenrecord.ScreenRecorderService.EXTRA_RESULT_CODE, resultCode);
+            serviceIntent.putExtra(org.levimc.launcher.core.screenrecord.ScreenRecorderService.EXTRA_RESULT_DATA, data);
+            androidx.core.content.ContextCompat.startForegroundService(activity, serviceIntent);
+        }
+        return true;
+    }
+
+    private void updateRecordButtonTint(boolean recording) {
+        if (recordButton == null) return;
+        int color = recording
+                ? android.graphics.Color.parseColor("#F44336")
+                : android.graphics.Color.parseColor("#CCCCCC");
+        recordButton.setColorFilter(color);
+    }
+
     public void hideAllOverlays() {
         PojavControls.setEnabled(activity,
                 activity instanceof PojavControlsHost ? (PojavControlsHost) activity : null,
@@ -609,6 +672,12 @@ public class InbuiltOverlayManager {
         if (hudOverlay != null) {
             hudOverlay.hide();
             hudOverlay = null;
+        }
+        if (recordButton != null) {
+            if (recordButton.getParent() instanceof android.view.ViewGroup) {
+                ((android.view.ViewGroup) recordButton.getParent()).removeView(recordButton);
+            }
+            recordButton = null;
         }
         instance = null;
     }

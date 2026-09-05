@@ -122,6 +122,7 @@ import okhttp3.OkHttpClient;
     private ProgressBar avatarProgress;
     private Button signInButton;
     private String lastAvatarXuid;
+    private long launchSessionStartMs = 0L;
     private final OkHttpClient avatarClient = new OkHttpClient();
     private ExecutorService accountExecutor = Executors.newSingleThreadExecutor();
     private LoadingDialog accountLoadingDialog;
@@ -239,6 +240,18 @@ import okhttp3.OkHttpClient;
             DynamicAnim.applyPressScale(accountAvatarContainer);
         }
 
+        View homeAccountStatusRow = findViewById(R.id.home_account_status_row);
+        if (homeAccountStatusRow != null) {
+            homeAccountStatusRow.setOnClickListener(v -> {
+                if (getActiveAccount() == null) {
+                    accountLoginLauncher.launch(new Intent(this, MsftLoginActivity.class));
+                } else {
+                    showAccountSwitchPopup(v);
+                }
+            });
+            DynamicAnim.applyPressScale(homeAccountStatusRow);
+        }
+
         refreshAccountHeaderUI();
     }
 
@@ -279,6 +292,51 @@ import okhttp3.OkHttpClient;
             if (signInButton != null) signInButton.setVisibility(View.GONE);
             if (accountAvatarContainer != null) accountAvatarContainer.setVisibility(View.VISIBLE);
             loadXboxAvatar(active);
+        }
+        updateHomeDashboard(active);
+    }
+
+    private void updateHomeDashboard(MsftAccountStore.MsftAccount active) {
+        if (binding == null) return;
+        android.widget.TextView statusText = binding.getRoot().findViewById(R.id.home_account_status_text);
+        if (statusText != null) {
+            if (active == null) {
+                statusText.setText(getString(R.string.not_signed_in));
+            } else {
+                String name = active.xboxGamertag != null && !active.xboxGamertag.isEmpty()
+                        ? active.xboxGamertag
+                        : active.minecraftUsername;
+                statusText.setText(getString(R.string.signed_in_as, name != null ? name : ""));
+            }
+        }
+
+        android.widget.ImageView homeAvatar = binding.getRoot().findViewById(R.id.home_account_avatar);
+        if (homeAvatar != null && active != null && accountAvatar != null && accountAvatar.getDrawable() != null) {
+            homeAvatar.setImageDrawable(accountAvatar.getDrawable());
+        }
+
+        org.levimc.launcher.ui.widgets.WeeklyPlaytimeChartView chart = binding.getRoot().findViewById(R.id.weekly_playtime_chart);
+        android.widget.TextView todayText = binding.getRoot().findViewById(R.id.playtime_today_text);
+        if (chart != null || todayText != null) {
+            long[] weekMs = org.levimc.launcher.core.stats.PlaytimeStore.getLastSevenDaysMillis(this);
+            String[] labels = new String[7];
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -6);
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault());
+            for (int i = 0; i < 7; i++) {
+                labels[i] = fmt.format(cal.getTime());
+                cal.add(java.util.Calendar.DAY_OF_YEAR, 1);
+            }
+            if (chart != null) {
+                chart.setBarColor(getColor(R.color.primary));
+                chart.setTrackColor(getColor(R.color.surface_variant));
+                chart.setLabelColor(getColor(R.color.text_secondary));
+                chart.setData(weekMs, labels, 6);
+            }
+            if (todayText != null) {
+                long totalMs = org.levimc.launcher.core.stats.PlaytimeStore.getTotalMillis(this);
+                todayText.setText(org.levimc.launcher.core.stats.PlaytimeStore.formatHoursDecimal(totalMs) + " total played");
+            }
         }
     }
 
@@ -1021,6 +1079,13 @@ import okhttp3.OkHttpClient;
     @Override
     protected void onResume() {
         super.onResume();
+        if (launchSessionStartMs > 0L) {
+            long sessionMs = System.currentTimeMillis() - launchSessionStartMs;
+            launchSessionStartMs = 0L;
+            if (sessionMs > 0L) {
+                org.levimc.launcher.core.stats.PlaytimeStore.addSessionMillis(this, sessionMs);
+            }
+        }
         refreshAccountHeaderUI();
         if (StorageMigrationService.isMigrationRunning(this)) {
             resumeStorageMigrationService();
@@ -1234,6 +1299,7 @@ import okhttp3.OkHttpClient;
                 @Override
                 public void onLaunchStarted() {
                     trace.milestone("Loading screen requested");
+                    launchSessionStartMs = System.currentTimeMillis();
                 }
 
                 @Override
@@ -1507,12 +1573,14 @@ import okhttp3.OkHttpClient;
         fileHandler.processIncomingFilesWithConfirmation(intent, new FileHandler.FileOperationCallback() {
             @Override
             public void onSuccess(int processedFiles) {
+                hideProgressLoader();
                 if (processedFiles > 0)
                     UIHelper.showToast(MainActivity.this, getString(R.string.files_processed, processedFiles));
             }
 
             @Override
             public void onError(String errorMessage) {
+                hideProgressLoader();
                 if (errorMessage != null && !errorMessage.isEmpty()) {
                     UIHelper.showToast(MainActivity.this, errorMessage);
                 }
@@ -1520,9 +1588,37 @@ import okhttp3.OkHttpClient;
 
             @Override
             public void onProgressUpdate(int progress) {
-                if (binding != null) binding.progressLoader.setProgress(progress);
+                showProgressLoader();
             }
         }, false);
+    }
+
+    private void showProgressLoader() {
+        if (binding == null) return;
+        org.levimc.launcher.ui.widgets.SwirlingLoaderView loader = binding.progressLoader;
+        if (loader.getVisibility() != View.VISIBLE) {
+            loader.setIndicatorColor(getColor(R.color.primary));
+            loader.setAlpha(0f);
+            loader.setVisibility(View.VISIBLE);
+            loader.animate().alpha(1f).setDuration(180).start();
+        }
+        loader.start();
+    }
+
+    private void hideProgressLoader() {
+        if (binding == null) return;
+        org.levimc.launcher.ui.widgets.SwirlingLoaderView loader = binding.progressLoader;
+        if (loader.getVisibility() == View.VISIBLE) {
+            loader.animate().alpha(0f).setDuration(150)
+                    .withEndAction(() -> {
+                        if (binding != null) {
+                            binding.progressLoader.setVisibility(View.GONE);
+                            binding.progressLoader.stop();
+                        }
+                    }).start();
+        } else {
+            loader.stop();
+        }
     }
 
     private boolean forwardIncomingMinecraftResourceToRunningGame() {

@@ -197,6 +197,7 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
             return
         }
         if (org.levimc.launcher.core.mods.inbuilt.overlay.MoreButtonsEditor.onActivityResult(requestCode, resultCode, data)) return
+        if (overlayManager?.onActivityResult(requestCode, resultCode, data) == true) return
         if (PojavControls.onActivityResult(requestCode, resultCode, data)) return
         super.onActivityResult(requestCode, resultCode, data)
     }

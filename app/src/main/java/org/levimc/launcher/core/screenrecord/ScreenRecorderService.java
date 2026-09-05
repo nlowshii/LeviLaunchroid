@@ -38,7 +38,10 @@ public class ScreenRecorderService extends Service {
             int resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             Intent resultData = intent.getParcelableExtra(EXTRA_RESULT_DATA);
 
-            startForegroundCompat();
+            if (!startForegroundCompat()) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
 
             if (resultData != null) {
                 ScreenRecorderManager.getInstance().onPermissionResult(resultCode, resultData);
@@ -52,27 +55,18 @@ public class ScreenRecorderService extends Service {
         return START_NOT_STICKY;
     }
 
-    private void startForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            boolean canUseMediaProjectionType = Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-                    || checkSelfPermission(android.Manifest.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION)
-                            == android.content.pm.PackageManager.PERMISSION_GRANTED;
-            if (canUseMediaProjectionType) {
-                try {
-                    startForeground(NOTIFICATION_ID, buildNotification(),
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
-                    return;
-                } catch (SecurityException e) {
-                    android.util.Log.w("ScreenRecorderService",
-                            "FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION rejected, falling back", e);
-                }
+    private boolean startForegroundCompat() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, buildNotification(),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
             } else {
-                android.util.Log.w("ScreenRecorderService",
-                        "FOREGROUND_SERVICE_MEDIA_PROJECTION not granted, starting without type");
+                startForeground(NOTIFICATION_ID, buildNotification());
             }
-            startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE);
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification());
+            return true;
+        } catch (Exception e) {
+            android.util.Log.e("ScreenRecorderService", "Could not start foreground recording service", e);
+            return false;
         }
     }
 
