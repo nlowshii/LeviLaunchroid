@@ -100,7 +100,8 @@ final class PojavControlOverlay extends ViewGroup {
         cursorView.configure(profile.virtualMouseImageUri, profile.virtualMouseScale);
         addView(cursorView);
         clampVirtualCursor();
-        cursorView.setVisibility(virtualMouse && host.pojavIsMenuOpen() ? VISIBLE : GONE);
+        cursorView.setVisibility(virtualMouse ? VISIBLE : GONE);
+        runtimeSurface.setVisibility(virtualMouse || !host.pojavIsMenuOpen() ? VISIBLE : INVISIBLE);
         updateVirtualMouseButtons();
         requestLayout();
         invalidate();
@@ -260,7 +261,8 @@ final class PojavControlOverlay extends ViewGroup {
             clampVirtualCursor();
             host.pojavSendPointer(virtualCursorX, virtualCursorY);
         }
-        cursorView.setVisibility(enabled && host.pojavIsMenuOpen() ? VISIBLE : GONE);
+        cursorView.setVisibility(enabled ? VISIBLE : GONE);
+        runtimeSurface.setVisibility(enabled || !host.pojavIsMenuOpen() ? VISIBLE : INVISIBLE);
         updateVirtualMouseButtons();
         requestLayout();
     }
@@ -456,7 +458,8 @@ final class PojavControlOverlay extends ViewGroup {
 
     private void updateVisibility() {
         boolean menu = host.pojavIsMenuOpen();
-        cursorView.setVisibility(virtualMouse && menu ? VISIBLE : GONE);
+        cursorView.setVisibility(virtualMouse ? VISIBLE : GONE);
+        runtimeSurface.setVisibility(virtualMouse || !host.pojavIsMenuOpen() ? VISIBLE : INVISIBLE);
         for (RuntimeButton button : buttons) {
             boolean specialToggle = button.data.keycodes[0] == ControlData.SPECIALBTN_TOGGLECTRL;
             boolean visible = specialToggle || (controlsVisible && button.isVisibleForMode(menu));
