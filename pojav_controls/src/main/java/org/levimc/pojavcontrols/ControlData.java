@@ -27,6 +27,11 @@ public class ControlData {
     public boolean passThruEnabled;
     public String name;
     public int[] keycodes;
+    public boolean macroEnabled;
+    public int macroActionCount = 2;
+    public int[] macroKeycodes = new int[4];
+    public long[] macroDelayMs = new long[3];
+    public int[] macroDelayUnits = new int[3];
     public float opacity;
     public int bgColor;
     public int strokeColor;
@@ -69,6 +74,11 @@ public class ControlData {
         passThruEnabled = source.passThruEnabled;
         name = source.name;
         keycodes = inflateKeycodes(source.keycodes);
+        macroEnabled = source.macroEnabled;
+        macroActionCount = source.macroActionCount;
+        macroKeycodes = source.macroKeycodes == null ? new int[4] : Arrays.copyOf(source.macroKeycodes, 4);
+        macroDelayMs = source.macroDelayMs == null ? new long[3] : Arrays.copyOf(source.macroDelayMs, 3);
+        macroDelayUnits = source.macroDelayUnits == null ? new int[3] : Arrays.copyOf(source.macroDelayUnits, 3);
         opacity = source.opacity;
         bgColor = source.bgColor;
         strokeColor = source.strokeColor;
@@ -87,6 +97,18 @@ public class ControlData {
         if (dynamicX == null || dynamicX.isBlank()) dynamicX = "0.5 * ${screen_width}";
         if (dynamicY == null || dynamicY.isBlank()) dynamicY = "0.5 * ${screen_height}";
         keycodes = inflateKeycodes(keycodes);
+        if (macroKeycodes == null) macroKeycodes = new int[4];
+        macroKeycodes = Arrays.copyOf(macroKeycodes, 4);
+        if (macroDelayMs == null) macroDelayMs = new long[3];
+        macroDelayMs = Arrays.copyOf(macroDelayMs, 3);
+        if (macroDelayUnits == null) macroDelayUnits = new int[3];
+        macroDelayUnits = Arrays.copyOf(macroDelayUnits, 3);
+        macroActionCount = Math.max(2, Math.min(4, macroActionCount));
+        for (int i = 0; i < macroKeycodes.length; i++) if (macroKeycodes[i] == 0) macroKeycodes[i] = KeyMapper.GLFW_KEY_UNKNOWN;
+        for (int i = 0; i < macroDelayMs.length; i++) {
+            macroDelayMs[i] = Math.max(0L, Math.min(3600000L, macroDelayMs[i]));
+            macroDelayUnits[i] = macroDelayUnits[i] == 1 ? 1 : 0;
+        }
         width = Math.max(16f, Math.min(width <= 0f ? 50f : width, 400f));
         height = Math.max(16f, Math.min(height <= 0f ? 50f : height, 400f));
         opacity = Math.max(0f, Math.min(opacity, 1f));

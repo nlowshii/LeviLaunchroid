@@ -13,7 +13,6 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
@@ -37,6 +36,8 @@ final class PojavControlsEditorView extends FrameLayout {
     static final int REQUEST_EXPORT = 4102;
     static final int REQUEST_CURSOR_IMAGE = 4103;
     static final int REQUEST_CURSOR_SOUND = 4104;
+    static final int REQUEST_CURSOR_FRAME_BASE = 4200;
+    static final int CURSOR_FRAME_COUNT = 6;
 
     private final Activity activity;
     private final Runnable closeAction;
@@ -46,7 +47,7 @@ final class PojavControlsEditorView extends FrameLayout {
     private final ControlEditorCanvas canvas;
     private final Spinner profileSpinner;
     private boolean profileSpinnerBusy;
-    private ImageView mousePreview;
+    private int pendingCursorFrameSlot;
 
     PojavControlsEditorView(Activity activity, Runnable closeAction) {
         super(activity);
@@ -153,7 +154,8 @@ final class PojavControlsEditorView extends FrameLayout {
     }
 
     boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND) return false;
+        boolean frameRequest = requestCode >= REQUEST_CURSOR_FRAME_BASE && requestCode < REQUEST_CURSOR_FRAME_BASE + CURSOR_FRAME_COUNT;
+        if (requestCode != REQUEST_IMPORT && requestCode != REQUEST_EXPORT && requestCode != REQUEST_CURSOR_IMAGE && requestCode != REQUEST_CURSOR_SOUND && !frameRequest) return false;
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri uri = data.getData();
         try {
@@ -181,9 +183,14 @@ final class PojavControlsEditorView extends FrameLayout {
                     }
                 }
                 profile.virtualMouseImageUri = uri.toString();
-                updateMousePreview(profile.virtualMouseImageUri);
                 saveCurrent(false);
                 Toast.makeText(activity, R.string.pojav_controls_image_selected, Toast.LENGTH_SHORT).show();
+            } else if (frameRequest) {
+                profile.normalize();
+                int slot = requestCode - REQUEST_CURSOR_FRAME_BASE;
+                profile.virtualMouseFrameUris.set(slot, uri.toString());
+                saveCurrent(false);
+                Toast.makeText(activity, R.string.pojav_controls_frame_selected, Toast.LENGTH_SHORT).show();
             } else if (requestCode == REQUEST_CURSOR_SOUND) {
                 int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
@@ -232,91 +239,177 @@ final class PojavControlsEditorView extends FrameLayout {
 
     private void showMouseSettings() {
         float density = getResources().getDisplayMetrics().density;
-        int padding = Math.round(18 * density);
         LinearLayout form = new LinearLayout(activity);
         form.setOrientation(LinearLayout.VERTICAL);
+        int padding = Math.round(18 * density);
         form.setPadding(padding, padding, padding, padding);
-        form.setBackground(surfaceBackground(0xFF3A3D45, 0.30f, density));
 
-        TextView previewLabel = new TextView(activity);
-        previewLabel.setText(R.string.pojav_controls_mouse_preview);
-        previewLabel.setTextColor(0xFFE7E9EE);
-        previewLabel.setTextSize(14);
-        form.addView(previewLabel, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(34 * density)));
+        TextView preview = new TextView(activity);
+        preview.setText(R.string.pojav_controls_mouse_preview);
+        preview.setTextColor(0xFFEAFBF3);
+        preview.setTextSize(15);
+        preview.setGravity(Gravity.CENTER);
+        preview.setBackgroundColor(0xFF283238);
+        form.addView(preview, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(58 * density)));
 
-        mousePreview = new ImageView(activity);
-        mousePreview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        mousePreview.setPadding(padding, padding, padding, padding);
-        mousePreview.setBackground(surfaceBackground(0xFF4A4D56, 0.30f, density));
-        mousePreview.setImageDrawable(null);
-        form.addView(mousePreview, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(118 * density)));
-        updateMousePreview(profile.virtualMouseImageUri);
-
-        TextView modeLabel = settingsLabel(R.string.pojav_controls_cursor_mode, density);
+        TextView modeLabel = new TextView(activity);
+        modeLabel.setText(R.string.pojav_controls_cursor_mode);
+        modeLabel.setTextColor(0xFFB8C0C8);
+        modeLabel.setTextSize(12);
+        modeLabel.setPadding(0, Math.round(12 * density), 0, 0);
         form.addView(modeLabel);
+
         RadioGroup cursorModes = new RadioGroup(activity);
         RadioButton followFinger = new RadioButton(activity);
         followFinger.setId(View.generateViewId());
         followFinger.setText(R.string.pojav_controls_cursor_follow);
-        followFinger.setTextColor(0xFFE7E9EE);
+        followFinger.setTextColor(0xFFEAFBF3);
         cursorModes.addView(followFinger);
         RadioButton relativeCursor = new RadioButton(activity);
         relativeCursor.setId(View.generateViewId());
         relativeCursor.setText(R.string.pojav_controls_cursor_relative);
-        relativeCursor.setTextColor(0xFFE7E9EE);
+        relativeCursor.setTextColor(0xFFEAFBF3);
         cursorModes.addView(relativeCursor);
         cursorModes.check(profile.virtualMouseMode == CustomControls.CURSOR_MODE_RELATIVE
                 ? relativeCursor.getId() : followFinger.getId());
         form.addView(cursorModes);
 
-        TextView scaleValue = settingsLabel(R.string.pojav_controls_mouse_scale, density);
-        form.addView(scaleValue);
+        TextView value = new TextView(activity);
+        value.setTextColor(0xFFB8C0C8);
+        value.setGravity(Gravity.CENTER_VERTICAL);
+        form.addView(value, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(38 * density)));
+
         SeekBar scale = new SeekBar(activity);
         scale.setMax(180);
         scale.setProgress(Math.round((profile.virtualMouseScale - 0.2f) * 100f));
         form.addView(scale, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(42 * density)));
-        Runnable updateScale = () -> {
-            int percent = Math.round((0.2f + scale.getProgress() / 100f) * 100f);
-            scaleValue.setText(activity.getString(R.string.pojav_controls_mouse_scale) + ": " + percent + "%");
-            profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
-            profile.normalize();
-            saveCurrent(false);
-        };
+        Runnable updateValue = () -> value.setText(activity.getString(R.string.pojav_controls_mouse_scale)
+                + ": " + Math.round((0.2f + scale.getProgress() / 100f) * 100f) + "%");
         scale.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { updateScale.run(); }
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { updateValue.run(); }
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {}
         });
-        updateScale.run();
+        updateValue.run();
 
-        Button choose = settingsButton(R.string.pojav_controls_choose_image, density);
+        Button choose = new Button(activity);
+        choose.setText(R.string.pojav_controls_choose_image);
+        choose.setAllCaps(false);
         choose.setOnClickListener(view -> startCursorImagePick());
         form.addView(choose);
 
-        Button clear = settingsButton(R.string.pojav_controls_clear_image, density);
+        TextView frameSlotLabel = new TextView(activity);
+        frameSlotLabel.setText(R.string.pojav_controls_cursor_frame_slot);
+        frameSlotLabel.setTextColor(0xFFB8C0C8);
+        form.addView(frameSlotLabel);
+
+        Spinner frameSlot = new Spinner(activity);
+        String[] frameEntries = new String[CURSOR_FRAME_COUNT];
+        for (int i = 0; i < CURSOR_FRAME_COUNT; i++) frameEntries[i] = "Frame " + (i + 1);
+        frameSlot.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item, frameEntries));
+        form.addView(frameSlot);
+
+        Button chooseFrame = new Button(activity);
+        chooseFrame.setText(R.string.pojav_controls_choose_frame);
+        chooseFrame.setAllCaps(false);
+        chooseFrame.setOnClickListener(view -> {
+            pendingCursorFrameSlot = frameSlot.getSelectedItemPosition();
+            startCursorFramePick(pendingCursorFrameSlot);
+        });
+        form.addView(chooseFrame);
+
+        TextView animationLabel = new TextView(activity);
+        animationLabel.setText(R.string.pojav_controls_cursor_animation_mode);
+        animationLabel.setTextColor(0xFFB8C0C8);
+        form.addView(animationLabel);
+
+        Spinner animationMode = new Spinner(activity);
+        animationMode.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{activity.getString(R.string.pojav_controls_cursor_mode_auto),
+                        activity.getString(R.string.pojav_controls_cursor_mode_gif),
+                        activity.getString(R.string.pojav_controls_cursor_mode_sprite),
+                        activity.getString(R.string.pojav_controls_cursor_mode_frames)}));
+        animationMode.setSelection(Math.max(0, Math.min(3, profile.virtualMouseAnimationMode)));
+        form.addView(animationMode);
+
+        TextView columnsValue = new TextView(activity);
+        columnsValue.setTextColor(0xFFB8C0C8);
+        form.addView(columnsValue);
+        SeekBar columns = new SeekBar(activity);
+        columns.setMax(15);
+        columns.setProgress(profile.virtualMouseSpriteColumns - 1);
+        form.addView(columns);
+        columns.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + (progress + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        columnsValue.setText(activity.getString(R.string.pojav_controls_sprite_columns) + ": " + profile.virtualMouseSpriteColumns);
+
+        TextView rowsValue = new TextView(activity);
+        rowsValue.setTextColor(0xFFB8C0C8);
+        form.addView(rowsValue);
+        SeekBar rows = new SeekBar(activity);
+        rows.setMax(15);
+        rows.setProgress(profile.virtualMouseSpriteRows - 1);
+        form.addView(rows);
+        rows.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + (progress + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        rowsValue.setText(activity.getString(R.string.pojav_controls_sprite_rows) + ": " + profile.virtualMouseSpriteRows);
+
+        TextView durationValue = new TextView(activity);
+        durationValue.setTextColor(0xFFB8C0C8);
+        form.addView(durationValue);
+        SeekBar duration = new SeekBar(activity);
+        duration.setMax(1970);
+        duration.setProgress(profile.virtualMouseFrameDurationMs - 30);
+        form.addView(duration);
+        duration.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + (progress + 30));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        durationValue.setText(activity.getString(R.string.pojav_controls_frame_duration) + ": " + profile.virtualMouseFrameDurationMs);
+
+        Button clear = new Button(activity);
+        clear.setText(R.string.pojav_controls_clear_image);
+        clear.setAllCaps(false);
         clear.setOnClickListener(view -> {
             profile.virtualMouseImageUri = "";
-            if (mousePreview != null) mousePreview.setImageDrawable(null);
             saveCurrent(false);
+            Toast.makeText(activity, R.string.pojav_controls_image_cleared, Toast.LENGTH_SHORT).show();
         });
         form.addView(clear);
 
-        Button chooseSound = settingsButton(R.string.pojav_controls_choose_sound, density);
+        Button chooseSound = new Button(activity);
+        chooseSound.setText(R.string.pojav_controls_choose_sound);
+        chooseSound.setAllCaps(false);
         chooseSound.setOnClickListener(view -> startCursorSoundPick());
         form.addView(chooseSound);
 
-        Button clearSound = settingsButton(R.string.pojav_controls_clear_sound, density);
+        Button clearSound = new Button(activity);
+        clearSound.setText(R.string.pojav_controls_clear_sound);
+        clearSound.setAllCaps(false);
         clearSound.setOnClickListener(view -> {
             profile.virtualMouseClickSoundUri = "";
             saveCurrent(false);
+            Toast.makeText(activity, R.string.pojav_controls_sound_cleared, Toast.LENGTH_SHORT).show();
         });
         form.addView(clearSound);
 
         ScrollView scroll = new ScrollView(activity);
-        scroll.setBackgroundColor(0xFF2B2E35);
         scroll.addView(form, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
 
@@ -324,57 +417,27 @@ final class PojavControlsEditorView extends FrameLayout {
                 .setTitle(R.string.pojav_controls_mouse_settings)
                 .setView(scroll)
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    profile.virtualMouseScale = 0.2f + scale.getProgress() / 100f;
+                    profile.virtualMouseAnimationMode = animationMode.getSelectedItemPosition();
+                    profile.virtualMouseSpriteColumns = columns.getProgress() + 1;
+                    profile.virtualMouseSpriteRows = rows.getProgress() + 1;
+                    profile.virtualMouseFrameDurationMs = duration.getProgress() + 30;
                     profile.virtualMouseMode = cursorModes.getCheckedRadioButtonId() == relativeCursor.getId()
                             ? CustomControls.CURSOR_MODE_RELATIVE : CustomControls.CURSOR_MODE_FOLLOW_FINGER;
                     profile.normalize();
                     saveCurrent(false);
                     canvas.rebuild();
-                    mousePreview = null;
                 })
-                .setNegativeButton(android.R.string.cancel, (dialog, which) -> mousePreview = null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
-    private TextView settingsLabel(int resource, float density) {
-        TextView label = new TextView(activity);
-        label.setText(resource);
-        label.setTextColor(0xFFB8BDC7);
-        label.setTextSize(12);
-        label.setPadding(0, Math.round(12 * density), 0, Math.round(4 * density));
-        return label;
-    }
-
-    private Button settingsButton(int resource, float density) {
-        Button button = new Button(activity);
-        button.setText(resource);
-        button.setTextColor(0xFFE7E9EE);
-        button.setTextSize(12);
-        button.setAllCaps(false);
-        button.setMinHeight(0);
-        button.setMinWidth(0);
-        button.setPadding(Math.round(14 * density), 0, Math.round(14 * density), 0);
-        button.setBackground(surfaceBackground(0xFF4A4D56, 0.30f, density));
-        button.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, Math.round(46 * density)));
-        return button;
-    }
-
-    private GradientDrawable surfaceBackground(int color, float rounding, float density) {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(color);
-        background.setCornerRadius(Math.max(12f, 72f * density * rounding));
-        return background;
-    }
-
-    private void updateMousePreview(String imageUri) {
-        if (mousePreview == null || imageUri == null || imageUri.isBlank()) return;
-        try (InputStream input = activity.getContentResolver().openInputStream(Uri.parse(imageUri))) {
-            if (input != null) {
-                android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(input);
-                if (bitmap != null) mousePreview.setImageBitmap(bitmap);
-            }
-        } catch (Exception ignored) {
-        }
+    private void startCursorFramePick(int slot) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        activity.startActivityForResult(intent, REQUEST_CURSOR_FRAME_BASE + Math.max(0, Math.min(CURSOR_FRAME_COUNT - 1, slot)));
     }
 
     private void startCursorSoundPick() {
@@ -498,6 +561,71 @@ final class PojavControlsEditorView extends FrameLayout {
             mapping.setOnClickListener(view -> showMappingDialog(selectedCodes, mapping));
         }
 
+        final CheckBox[] macroEnabledBox = new CheckBox[1];
+        final Spinner[] macroCountSpinner = new Spinner[1];
+        final int[][] macroSelectedCodes = new int[4][];
+        final EditText[] macroDelayInputs = new EditText[3];
+        final Spinner[] macroDelayUnits = new Spinner[3];
+        final LinearLayout[] macroRows = new LinearLayout[4];
+        if (target.type == ControlEditorCanvas.EditorTarget.BUTTON ||
+                target.type == ControlEditorCanvas.EditorTarget.DRAWER_BUTTON) {
+            addLabel(form, R.string.pojav_controls_macro);
+            macroEnabledBox[0] = check(form, R.string.pojav_controls_macro_enabled, target.data.macroEnabled);
+            addLabel(form, R.string.pojav_controls_macro_actions);
+            Spinner countSpinner = new Spinner(activity);
+            countSpinner.setAdapter(new ArrayAdapter<>(activity,
+                    android.R.layout.simple_spinner_dropdown_item, new String[]{"2", "3", "4"}));
+            countSpinner.setSelection(Math.max(0, Math.min(2, target.data.macroActionCount - 2)));
+            form.addView(countSpinner);
+            macroCountSpinner[0] = countSpinner;
+            int[] actionLabels = new int[]{R.string.pojav_controls_macro_action_1,
+                    R.string.pojav_controls_macro_action_2, R.string.pojav_controls_macro_action_3,
+                    R.string.pojav_controls_macro_action_4};
+            int[] delayLabels = new int[]{R.string.pojav_controls_macro_delay_1,
+                    R.string.pojav_controls_macro_delay_2, R.string.pojav_controls_macro_delay_3};
+            String[] units = new String[]{activity.getString(R.string.pojav_controls_macro_seconds),
+                    activity.getString(R.string.pojav_controls_macro_minutes)};
+            for (int i = 0; i < 4; i++) {
+                int code = target.data.macroKeycodes == null || target.data.macroKeycodes.length <= i
+                        ? KeyMapper.GLFW_KEY_UNKNOWN : target.data.macroKeycodes[i];
+                macroSelectedCodes[i] = new int[]{code};
+                LinearLayout row = new LinearLayout(activity);
+                row.setOrientation(LinearLayout.VERTICAL);
+                addLabel(row, actionLabels[i]);
+                Button actionButton = new Button(activity);
+                actionButton.setText(mappingText(macroSelectedCodes[i]));
+                actionButton.setAllCaps(false);
+                final int actionIndex = i;
+                actionButton.setOnClickListener(view -> showMappingDialog(
+                        macroSelectedCodes[actionIndex], actionButton));
+                row.addView(actionButton);
+                if (i < 3) {
+                    EditText delay = field(row, delayLabels[i], Float.toString(
+                            target.data.macroDelayUnits != null && target.data.macroDelayUnits[i] == 1
+                                    ? target.data.macroDelayMs[i] / 60000f
+                                    : target.data.macroDelayMs[i] / 1000f));
+                    Spinner unit = new Spinner(activity);
+                    unit.setAdapter(new ArrayAdapter<>(activity,
+                            android.R.layout.simple_spinner_dropdown_item, units));
+                    unit.setSelection(target.data.macroDelayUnits != null
+                            && target.data.macroDelayUnits[i] == 1 ? 1 : 0);
+                    row.addView(unit);
+                    macroDelayInputs[i] = delay;
+                    macroDelayUnits[i] = unit;
+                }
+                form.addView(row);
+                macroRows[i] = row;
+            }
+            countSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    int count = position + 2;
+                    for (int i = 0; i < macroRows.length; i++) {
+                        if (macroRows[i] != null) macroRows[i].setVisibility(i < count ? VISIBLE : GONE);
+                    }
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+            });
+        }
         EditText x = field(form, R.string.pojav_controls_position_x, target.data.dynamicX);
         EditText y = field(form, R.string.pojav_controls_position_y, target.data.dynamicY);
         SeekBar width = slider(form, R.string.pojav_controls_width, target.data.width, 400, "dp");
@@ -620,6 +748,17 @@ final class PojavControlsEditorView extends FrameLayout {
                 .setPositiveButton(android.R.string.ok, (ignored, which) -> {
                     target.data.name = name.getText().toString().trim();
                     target.data.keycodes = Arrays.copyOf(selectedCodes, 1);
+                    if (macroEnabledBox[0] != null) {
+                        target.data.macroEnabled = macroEnabledBox[0].isChecked();
+                        target.data.macroActionCount = macroCountSpinner[0].getSelectedItemPosition() + 2;
+                        for (int i = 0; i < 4; i++) target.data.macroKeycodes[i] = macroSelectedCodes[i][0];
+                        for (int i = 0; i < 3; i++) {
+                            float value = number(macroDelayInputs[i], 0f);
+                            boolean minutes = macroDelayUnits[i].getSelectedItemPosition() == 1;
+                            target.data.macroDelayUnits[i] = minutes ? 1 : 0;
+                            target.data.macroDelayMs[i] = Math.round(value * (minutes ? 60000f : 1000f));
+                        }
+                    }
                     target.data.dynamicX = x.getText().toString().trim();
                     target.data.dynamicY = y.getText().toString().trim();
                     target.data.width = width.getProgress();

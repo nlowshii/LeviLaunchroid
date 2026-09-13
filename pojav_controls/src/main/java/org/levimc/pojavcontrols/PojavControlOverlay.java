@@ -11,6 +11,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Movie;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioAttributes;
@@ -18,6 +19,8 @@ import android.media.SoundPool;
 import android.os.Build;
 import android.net.Uri;
 import android.os.SystemClock;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -97,7 +100,10 @@ final class PojavControlOverlay extends ViewGroup {
             addView(joystick);
         }
         for (ControlDrawerData data : profile.mDrawerDataList) addDrawer(data);
-        cursorView.configure(profile.virtualMouseImageUri, profile.virtualMouseScale);
+        cursorView.configure(profile.virtualMouseImageUri, profile.virtualMouseScale,
+                profile.virtualMouseAnimationMode, profile.virtualMouseFrameUris,
+                profile.virtualMouseSpriteColumns, profile.virtualMouseSpriteRows,
+                profile.virtualMouseFrameDurationMs);
         addView(cursorView);
         clampVirtualCursor();
         cursorView.setVisibility(virtualMouse ? VISIBLE : GONE);
@@ -560,6 +566,12 @@ final class PojavControlOverlay extends ViewGroup {
         private final Paint outline = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path pointer = new Path();
         private Bitmap customBitmap;
+        private final ArrayList<Bitmap> individualFrames = new ArrayList<>();
+        private Movie animatedMovie;
+        private int spriteColumns = 1;
+        private int spriteRows = 1;
+        private int frameDurationMs = 100;
+        private long animationStartedAt;
 
         VirtualMouseCursor(Context context) {
             super(context);
@@ -573,23 +585,45 @@ final class PojavControlOverlay extends ViewGroup {
             setFocusable(false);
         }
 
-        void configure(String imageUri, float scale) {
+        void configure(String imageUri, float scale, int animationMode, List<String> frameUris,
+                       int columns, int rows, int durationMs) {
             if (customBitmap != null && !customBitmap.isRecycled()) customBitmap.recycle();
             customBitmap = null;
-            if (imageUri != null && !imageUri.isBlank()) {
-                try (InputStream input = getContext().getContentResolver().openInputStream(Uri.parse(imageUri))) {
-                    if (input != null) customBitmap = BitmapFactory.decodeStream(input);
-                } catch (Exception ignored) {
-                    customBitmap = null;
+            for (Bitmap frame : individualFrames) if (frame != null && !frame.isRecycled()) frame.recycle();
+            individualFrames.clear();
+            animatedMovie = null;
+            spriteColumns = Math.max(1, Math.min(16, columns));
+            spriteRows = Math.max(1, Math.min(16, rows));
+            frameDurationMs = Math.max(30, Math.min(2000, durationMs));
+            animationStartedAt = SystemClock.uptimeMillis();
+            if (animationMode == CustomControls.CURSOR_ANIMATION_FRAMES && frameUris != null) {
+                for (String frameUri : frameUris) {
+                    if (frameUri == null || frameUri.isBlank()) continue;
+                    try (InputStream input = getContext().getContentResolver().openInputStream(Uri.parse(frameUri))) {
+                        if (input != null) {
+                            Bitmap frame = BitmapFactory.decodeStream(input);
+                            if (frame != null) individualFrames.add(frame);
+                        }
+                    } catch (Exception ignored) {
+                    }
                 }
             }
-            float safeScale = Math.max(0.2f, Math.min(2f, scale));
-            int size = Math.max(24, Math.round(36f * getResources().getDisplayMetrics().density * safeScale));
-            ViewGroup.LayoutParams params = getLayoutParams();
-            if (params != null) {
-                params.width = size;
-                params.height = size;
-                setLayoutParams(params);
+            if (imageUri != null && !imageUri.isBlank() && individualFrames.isEmpty()) {
+                Uri uri = Uri.parse(imageUri);
+                try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
+                    if (input != null && animationMode != CustomControls.CURSOR_ANIMATION_SPRITE) {
+                        animatedMovie = Movie.decodeStream(input);
+                    }
+                } catch (Exception ignored) {
+                    animatedMovie = null;
+                }
+                if (animatedMovie == null) {
+                    try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
+                        if (input != null) customBitmap = BitmapFactory.decodeStream(input);
+                    } catch (Exception ignored) {
+                        customBitmap = null;
+                    }
+                }
             }
             requestLayout();
             invalidate();
@@ -597,9 +631,38 @@ final class PojavControlOverlay extends ViewGroup {
 
         @Override
         protected void onDraw(Canvas canvas) {
+            if (!individualFrames.isEmpty()) {
+                int frame = (int) (((SystemClock.uptimeMillis() - animationStartedAt) / frameDurationMs) % individualFrames.size());
+                Bitmap bitmap = individualFrames.get(frame);
+                canvas.drawBitmap(bitmap, null, new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                postInvalidateDelayed(16L);
+                return;
+            }
+            if (animatedMovie != null) {
+                int duration = animatedMovie.duration() > 0 ? animatedMovie.duration() : frameDurationMs;
+                int time = (int) ((SystemClock.uptimeMillis() - animationStartedAt) % duration);
+                animatedMovie.setTime(time);
+                animatedMovie.draw(canvas, 0, 0);
+                postInvalidateDelayed(16L);
+                return;
+            }
             if (customBitmap != null && !customBitmap.isRecycled()) {
-                canvas.drawBitmap(customBitmap, null,
-                        new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                if (spriteColumns > 1 || spriteRows > 1) {
+                    int frameCount = spriteColumns * spriteRows;
+                    int frame = (int) (((SystemClock.uptimeMillis() - animationStartedAt) / frameDurationMs) % frameCount);
+                    int frameWidth = Math.max(1, customBitmap.getWidth() / spriteColumns);
+                    int frameHeight = Math.max(1, customBitmap.getHeight() / spriteRows);
+                    Rect source = new Rect((frame % spriteColumns) * frameWidth,
+                            (frame / spriteColumns) * frameHeight,
+                            Math.min(customBitmap.getWidth(), (frame % spriteColumns + 1) * frameWidth),
+                            Math.min(customBitmap.getHeight(), (frame / spriteColumns + 1) * frameHeight));
+                    canvas.drawBitmap(customBitmap, source,
+                            new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                    postInvalidateDelayed(16L);
+                } else {
+                    canvas.drawBitmap(customBitmap, null,
+                            new android.graphics.RectF(0, 0, getWidth(), getHeight()), null);
+                }
                 return;
             }
             float density = getResources().getDisplayMetrics().density;
@@ -629,6 +692,8 @@ final class PojavControlOverlay extends ViewGroup {
         private boolean rawPassThrough;
         private boolean virtualMouseButton;
         private boolean virtualMouseActive;
+        private final Handler macroHandler = new Handler(Looper.getMainLooper());
+        private boolean macroRunning;
         private float passThroughX;
         private float passThroughY;
 
@@ -664,7 +729,11 @@ final class PojavControlOverlay extends ViewGroup {
                 passThroughX = event.getX();
                 passThroughY = event.getY();
                 rawPassThrough = data.passThruEnabled && host.pojavIsMenuOpen();
-                if (!data.isToggle || virtualMouseButton) press(true);
+                if (data.macroEnabled) {
+                    runMacro();
+                } else if (!data.isToggle || virtualMouseButton) {
+                    press(true);
+                }
                 return true;
             }
             if (action == MotionEvent.ACTION_MOVE) {
@@ -685,10 +754,12 @@ final class PojavControlOverlay extends ViewGroup {
                 return true;
             }
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
-                if (data.isToggle && !virtualMouseButton && !outside) {
-                    toggled = !toggled;
-                    press(toggled);
-                } else if (!data.isToggle || virtualMouseButton) press(false);
+                if (!data.macroEnabled) {
+                    if (data.isToggle && !virtualMouseButton && !outside) {
+                        toggled = !toggled;
+                        press(toggled);
+                    } else if (!data.isToggle || virtualMouseButton) press(false);
+                }
                 if (!outside) performClick();
                 outside = false;
                 rawPassThrough = false;
@@ -696,7 +767,7 @@ final class PojavControlOverlay extends ViewGroup {
                 return true;
             }
             if (action == MotionEvent.ACTION_CANCEL) {
-                if (!data.isToggle || virtualMouseButton) press(false);
+                if (!data.macroEnabled && (!data.isToggle || virtualMouseButton)) press(false);
                 outside = false;
                 rawPassThrough = false;
                 if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
@@ -712,6 +783,8 @@ final class PojavControlOverlay extends ViewGroup {
         }
 
         void release() {
+            macroHandler.removeCallbacksAndMessages(null);
+            macroRunning = false;
             if (pressed) send(false);
             pressed = false;
             toggled = false;
@@ -734,6 +807,31 @@ final class PojavControlOverlay extends ViewGroup {
             return height > 0 ? 1.4f * 1080f / height : 1.4f;
         }
 
+        private void runMacro() {
+            if (macroRunning) return;
+            macroRunning = true;
+            long offset = 0L;
+            int count = Math.max(2, Math.min(4, data.macroActionCount));
+            for (int i = 0; i < count; i++) {
+                final int action = i;
+                final long start = offset;
+                macroHandler.postDelayed(() -> {
+                    int code = data.macroKeycodes[action];
+                    if (code == KeyMapper.GLFW_KEY_UNKNOWN) return;
+                    sendCode(code, true);
+                    macroHandler.postDelayed(() -> sendCode(code, false), 40L);
+                }, start);
+                if (i < count - 1) offset += data.macroDelayMs[i];
+            }
+            macroHandler.postDelayed(() -> macroRunning = false, offset + 80L);
+        }
+        private void sendCode(int code, boolean down) {
+            if (code < 0) specialHandler.handle(code, down);
+            else if (code != KeyMapper.GLFW_KEY_UNKNOWN) {
+                int bedrockCode = KeyMapper.toBedrock(code);
+                if (bedrockCode != KeyMapper.GLFW_KEY_UNKNOWN) host.pojavSendKey(bedrockCode, down);
+            }
+        }
         private void press(boolean down) {
             if (pressed == down) return;
             pressed = down;
@@ -749,12 +847,7 @@ final class PojavControlOverlay extends ViewGroup {
         }
 
         private void send(boolean down) {
-            int code = data.primaryKeycode();
-            if (code < 0) specialHandler.handle(code, down);
-            else if (code != KeyMapper.GLFW_KEY_UNKNOWN) {
-                int bedrockCode = KeyMapper.toBedrock(code);
-                if (bedrockCode != KeyMapper.GLFW_KEY_UNKNOWN) host.pojavSendKey(bedrockCode, down);
-            }
+            sendCode(data.primaryKeycode(), down);
         }
 
         private void applyStyle() {
