@@ -7,7 +7,7 @@ import java.util.List;
 
 @Keep
 public class CustomControls {
-    public int version = 10
+    public int version = 10;
     public float scaledAt = 100f;
     public static final int CURSOR_MODE_FOLLOW_FINGER = 0;
     public static final int CURSOR_MODE_RELATIVE = 1;
