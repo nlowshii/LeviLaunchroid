@@ -2,11 +2,14 @@ package org.levimc.launcher.core.mods.inbuilt.nativemod;
 
 public final class HotbarSlotMod {
     private static boolean initialized;
+    private static boolean initAttempted;
 
     private HotbarSlotMod() {}
 
     public static synchronized boolean initialize() {
         if (initialized) return true;
+        if (initAttempted) return false;
+        initAttempted = true;
         if (!InbuiltModsNative.loadLibrary()) return false;
         initialized = nativeInit();
         return initialized;
@@ -16,6 +19,12 @@ public final class HotbarSlotMod {
         if (enabled && !initialize()) return;
         if (!InbuiltModsNative.isLoaded()) return;
         nativeSetEnabled(enabled);
+    }
+
+    public static void setItemIconsEnabled(boolean enabled) {
+        if (enabled && !initialize()) return;
+        if (!InbuiltModsNative.isLoaded()) return;
+        nativeSetItemIconsEnabled(enabled);
     }
 
     public static void setSlotState(int slot, float x, float y, float width, float height,
@@ -29,6 +38,10 @@ public final class HotbarSlotMod {
         return initialize() && nativeHasItem(slot);
     }
 
+    public static int getItemCount(int slot) {
+        return initialize() ? nativeGetItemCount(slot) : 0;
+    }
+
     public static void clearSlot(int slot) {
         if (!InbuiltModsNative.isLoaded()) return;
         nativeClearSlot(slot);
@@ -36,9 +49,11 @@ public final class HotbarSlotMod {
 
     private static native boolean nativeInit();
     private static native void nativeSetEnabled(boolean enabled);
+    private static native void nativeSetItemIconsEnabled(boolean enabled);
     private static native void nativeSetSlotState(int slot, float x, float y, float width, float height,
                                                    float surfaceWidth, float surfaceHeight, float alpha,
                                                    boolean visible, boolean pressed);
     private static native boolean nativeHasItem(int slot);
+    private static native int nativeGetItemCount(int slot);
     private static native void nativeClearSlot(int slot);
 }

@@ -140,7 +140,7 @@ jobs:
 
       - name: Compile Debug Without Firebase Secrets
         if: env.HAS_GOOGLE_SERVICES == 'false'
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:compileDebugKotlin :app:compileDebugJavaWithJavac
 
       - name: Upload Debug APK
         if: env.HAS_GOOGLE_SERVICES == 'true'

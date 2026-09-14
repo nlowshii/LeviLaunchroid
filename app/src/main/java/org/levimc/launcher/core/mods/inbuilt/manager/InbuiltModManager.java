@@ -19,6 +19,7 @@ public class InbuiltModManager {
     private static final String KEY_NOTIFICATIONS_ENABLED = "notifications_enabled";
     private static final String KEY_MOD_MENU_OPACITY = "mod_menu_opacity";
     private static final String KEY_MOD_MENU_BUTTON_OPACITY = "mod_menu_button_opacity";
+    private static final String KEY_MOD_MENU_COMPACT = "mod_menu_compact";
     private static final String KEY_PAUSE_MENU_ONLY = "pause_menu_only";
     private static final String KEY_FAVORITE_MOD_KEYS = "favorite_mod_keys";
     private static final String KEY_INBUILT_MOD_ENABLED_PREFIX = "inbuilt_mod_enabled_";
@@ -27,6 +28,7 @@ public class InbuiltModManager {
     private static final String KEY_ZOOM_KEYBIND = "zoom_keybind";
     private static final String KEY_ZOOM_TRANSITION_DURATION = "zoom_transition_duration";
     private static final String KEY_CURSOR_SENSITIVITY = "cursor_sensitivity";
+    private static final String KEY_GYRO_SENSITIVITY_MULTIPLIER = "gyro_sensitivity_multiplier";
     private static final String KEY_GYRO_SENSITIVITY_X = "gyro_sensitivity_x";
     private static final String KEY_GYRO_SENSITIVITY_Y = "gyro_sensitivity_y";
     private static final String KEY_GYRO_INVERT_X = "gyro_invert_x";
@@ -37,6 +39,7 @@ public class InbuiltModManager {
     private static final String KEY_OVERLAY_LOCK_PREFIX = "overlay_lock_";
     private static final String KEY_OVERLAY_SHOW_EVERYWHERE_PREFIX = "overlay_show_everywhere_";
     private static final String KEY_HOTBAR_ITEM_ICONS = "hotbar_item_icons";
+    private static final String KEY_HOTBAR_ITEM_COUNTS = "hotbar_item_counts";
     private static final String KEY_HOTBAR_SLOT_ENABLED_PREFIX = "hotbar_slot_enabled_";
     private static final int DEFAULT_OVERLAY_BUTTON_SIZE = 56;
     private static final int DEFAULT_OVERLAY_OPACITY = 100;
@@ -44,6 +47,7 @@ public class InbuiltModManager {
     private static final int DEFAULT_ZOOM_LEVEL = 10;
     private static final int DEFAULT_ZOOM_TRANSITION_DURATION = 150;
     private static final int DEFAULT_CURSOR_SENSITIVITY = 120;
+    private static final int DEFAULT_GYRO_SENSITIVITY_MULTIPLIER = 100;
     private static final int DEFAULT_GYRO_SENSITIVITY = 100;
     private static final int DEFAULT_GYRO_DEADZONE = 5;
 
@@ -116,7 +120,7 @@ public class InbuiltModManager {
     }
 
     public boolean isModMenuEnabled() {
-        return prefs.getBoolean(KEY_MOD_MENU_ENABLED, false);
+        return prefs.getBoolean(KEY_MOD_MENU_ENABLED, true);
     }
 
     public void setModMenuEnabled(boolean enabled) {
@@ -145,6 +149,14 @@ public class InbuiltModManager {
 
     public void setModMenuButtonOpacity(int opacity) {
         prefs.edit().putInt(KEY_MOD_MENU_BUTTON_OPACITY, Math.max(0, Math.min(100, opacity))).apply();
+    }
+
+    public boolean isModMenuCompact() {
+        return prefs.getBoolean(KEY_MOD_MENU_COMPACT, false);
+    }
+
+    public void setModMenuCompact(boolean compact) {
+        prefs.edit().putBoolean(KEY_MOD_MENU_COMPACT, compact).apply();
     }
 
     public boolean isPauseMenuOnly() {
@@ -280,6 +292,14 @@ public class InbuiltModManager {
         return overlayVisibilityRevision.get();
     }
 
+    public int getGyroSensitivityMultiplier() {
+        return prefs.getInt(KEY_GYRO_SENSITIVITY_MULTIPLIER, DEFAULT_GYRO_SENSITIVITY_MULTIPLIER);
+    }
+
+    public void setGyroSensitivityMultiplier(int multiplier) {
+        prefs.edit().putInt(KEY_GYRO_SENSITIVITY_MULTIPLIER, Math.max(25, Math.min(5000, multiplier))).apply();
+    }
+
     public int getGyroSensitivityX() {
         return prefs.getInt(KEY_GYRO_SENSITIVITY_X, DEFAULT_GYRO_SENSITIVITY);
     }
@@ -317,7 +337,7 @@ public class InbuiltModManager {
     }
 
     public void setGyroDeadzone(int deadzone) {
-        prefs.edit().putInt(KEY_GYRO_DEADZONE, Math.max(0, Math.min(50, deadzone))).apply();
+        prefs.edit().putInt(KEY_GYRO_DEADZONE, Math.max(0, Math.min(100, deadzone))).apply();
     }
     public boolean isHotbarItemIconsEnabled() {
         return prefs.getBoolean(KEY_HOTBAR_ITEM_ICONS, false);
@@ -325,6 +345,14 @@ public class InbuiltModManager {
 
     public void setHotbarItemIconsEnabled(boolean enabled) {
         prefs.edit().putBoolean(KEY_HOTBAR_ITEM_ICONS, enabled).apply();
+    }
+
+    public boolean isHotbarItemCountsEnabled() {
+        return prefs.getBoolean(KEY_HOTBAR_ITEM_COUNTS, false);
+    }
+
+    public void setHotbarItemCountsEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_HOTBAR_ITEM_COUNTS, enabled).apply();
     }
 
     public boolean isHotbarSlotEnabled(int slot) {

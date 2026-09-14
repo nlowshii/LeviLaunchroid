@@ -84,6 +84,10 @@ public class MainActivity extends GameActivity implements View.OnKeyListener, Fi
     private static boolean mHasStoragePermission ;
     private static boolean mHasReadMediaImagesPermission;
     public static MainActivity mInstance;
+    private boolean mLeviKeepRunningInBackground = false;
+    private boolean mLeviSuppressedGameActivityPause = false;
+    private boolean mLeviSuppressedGameActivityStop = false;
+    private boolean mLeviSuppressedGameActivityFocusLoss = false;
     Class SystemProperties;
     private ClipboardManager clipboardManager;
     Method getPropMethod;
@@ -98,6 +102,7 @@ public class MainActivity extends GameActivity implements View.OnKeyListener, Fi
     private ThermalMonitor mThermalMonitor;
 
     public TextInputProxyEditTextbox textInputWidget;
+    private View textInputFocusSink;
     private TextToSpeech textToSpeechManager;
     private Thread mMainThread = null;
     public int virtualKeyboardHeight = 0;
@@ -613,8 +618,27 @@ public class MainActivity extends GameActivity implements View.OnKeyListener, Fi
         return super.dispatchGenericMotionEvent(event);
     }
 
+    private boolean handleActiveTextInputBackKey(@NonNull KeyEvent event) {
+        if (!isTextWidgetActive()) {
+            return false;
+        }
+
+        int keyCode = event.getKeyCode();
+        if (keyCode != KeyEvent.KEYCODE_ESCAPE && keyCode != KeyEvent.KEYCODE_BACK) {
+            return false;
+        }
+
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            nativeBackPressed();
+        }
+        return true;
+    }
+
     @Override
     public boolean dispatchKeyEvent(@NonNull KeyEvent event) {
+        if (handleActiveTextInputBackKey(event)) {
+            return true;
+        }
         if (nativeKeyHandler(event.getKeyCode(), event.getAction())) {
             return true;
         }
@@ -840,8 +864,21 @@ public class MainActivity extends GameActivity implements View.OnKeyListener, Fi
                 });
             }
         });
-        ((ViewGroup) findViewById(android.R.id.content)).addView(textInputProxyEditTextbox, new ViewGroup.LayoutParams(1, 1));
-        final View rootView = findViewById(android.R.id.content).getRootView();
+        ViewGroup contentView = (ViewGroup) findViewById(android.R.id.content);
+        contentView.addView(textInputProxyEditTextbox, new ViewGroup.LayoutParams(1, 1));
+
+        this.textInputFocusSink = new View(this);
+        this.textInputFocusSink.setFocusable(true);
+        this.textInputFocusSink.setFocusableInTouchMode(true);
+        this.textInputFocusSink.setClickable(false);
+        this.textInputFocusSink.setLongClickable(false);
+        this.textInputFocusSink.setAlpha(0.0f);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            this.textInputFocusSink.setDefaultFocusHighlightEnabled(false);
+        }
+        contentView.addView(this.textInputFocusSink, new ViewGroup.LayoutParams(1, 1));
+
+        final View rootView = contentView.getRootView();
         rootView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
             public void onGlobalLayout() {
@@ -907,9 +944,9 @@ public class MainActivity extends GameActivity implements View.OnKeyListener, Fi
         getInputMethodManager().hideSoftInputFromWindow(this.textInputWidget.getWindowToken(), 0);
 
         this.textInputWidget.clearFocus();
-        View decorView = getWindow().getDecorView();
-        decorView.setFocusableInTouchMode(true);
-        decorView.requestFocus();
+        if (this.textInputFocusSink != null) {
+            this.textInputFocusSink.requestFocus();
+        }
 
         this.mPauseTextboxUIUpdates = true;
         try {
@@ -1594,9 +1631,91 @@ public class MainActivity extends GameActivity implements View.OnKeyListener, Fi
         );
     }
 
+    public void setLeviKeepRunningInBackground(boolean enabled) {
+        mLeviKeepRunningInBackground = enabled;
+        com.microsoft.xal.androidjava.PresenceManager.setLeviKeepRunningInBackground(enabled);
+        if (!enabled) {
+            mLeviSuppressedGameActivityPause = false;
+            mLeviSuppressedGameActivityStop = false;
+            mLeviSuppressedGameActivityFocusLoss = false;
+        }
+    }
+
+    public boolean isLeviKeepRunningInBackground() {
+        return mLeviKeepRunningInBackground;
+    }
+
+    @Override
+    protected void onPauseNative(long handle) {
+        if (mLeviKeepRunningInBackground && !isFinishing()) {
+            mLeviSuppressedGameActivityPause = true;
+            Log.d("LeviBackground", "Suppressed GameActivity native pause");
+            return;
+        }
+        super.onPauseNative(handle);
+    }
+
+    @Override
+    protected void onResumeNative(long handle) {
+        if (mLeviSuppressedGameActivityPause) {
+            mLeviSuppressedGameActivityPause = false;
+            Log.d("LeviBackground", "Suppressed paired GameActivity native resume");
+            return;
+        }
+        super.onResumeNative(handle);
+    }
+
+    @Override
+    protected void onStopNative(long handle) {
+        if (mLeviKeepRunningInBackground && !isFinishing()) {
+            mLeviSuppressedGameActivityStop = true;
+            Log.d("LeviBackground", "Suppressed GameActivity native stop");
+            return;
+        }
+        super.onStopNative(handle);
+    }
+
+    @Override
+    protected void onStartNative(long handle) {
+        if (mLeviSuppressedGameActivityStop) {
+            mLeviSuppressedGameActivityStop = false;
+            Log.d("LeviBackground", "Suppressed paired GameActivity native start");
+            return;
+        }
+        super.onStartNative(handle);
+    }
+
+    @Override
+    protected void onWindowFocusChangedNative(long handle, boolean focused) {
+        if (mLeviKeepRunningInBackground) {
+            if (!focused) {
+                mLeviSuppressedGameActivityFocusLoss = true;
+                Log.d("LeviBackground", "Suppressed GameActivity native focus loss");
+                return;
+            }
+            if (mLeviSuppressedGameActivityFocusLoss) {
+                mLeviSuppressedGameActivityFocusLoss = false;
+                Log.d("LeviBackground", "Suppressed paired GameActivity native focus gain");
+                return;
+            }
+        }
+        super.onWindowFocusChangedNative(handle, focused);
+    }
+
+    @Override
+    protected void onTrimMemoryNative(long handle, int level) {
+        if (mLeviKeepRunningInBackground && level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            Log.d("LeviBackground", "Suppressed UI-hidden trim callback");
+            return;
+        }
+        super.onTrimMemoryNative(handle, level);
+    }
+
     @Override
     public void onPause() {
-        nativeSuspend();
+        if (!mLeviKeepRunningInBackground || isFinishing()) {
+            nativeSuspend();
+        }
         super.onPause();
         if (isFinishing()) {
             nativeShutdown();
@@ -1605,7 +1724,9 @@ public class MainActivity extends GameActivity implements View.OnKeyListener, Fi
 
     @Override
     protected void onStop() {
-        nativeStopThis();
+        if (!mLeviKeepRunningInBackground || isFinishing()) {
+            nativeStopThis();
+        }
         super.onStop();
 
         for (ActivityListener activityListener : this.mActivityListeners) {

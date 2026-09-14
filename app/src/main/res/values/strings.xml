@@ -252,6 +252,16 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="instance_clear_icon">Clear</string>
     <string name="instance_icon_hint">Will be saved as LargeLogo.png under the version folder. Click the icon to change.</string>
     <string name="instance_isolation_desc">Isolate game data for this instance. Other instances will not be affected.</string>
+    <string name="instance_shortcut_title">Home Screen Shortcut</string>
+    <string name="instance_shortcut_desc">Name and icon changes save automatically. Tap Add Shortcut to create or update the home screen shortcut.</string>
+    <string name="instance_shortcut_name">Shortcut Name</string>
+    <string name="instance_shortcut_icon">Shortcut Icon</string>
+    <string name="instance_shortcut_choose_icon">Choose Icon</string>
+    <string name="instance_shortcut_default_icon">Use Default</string>
+    <string name="instance_shortcut_add_button">Add Shortcut</string>
+    <string name="instance_settings_auto_save_failed">Could not save this instance setting.</string>
+    <string name="instance_shortcut_not_supported">Your home screen launcher does not support pinned shortcuts.</string>
+    <string name="instance_shortcut_missing">This Minecraft instance is no longer available.</string>
     <string name="instance_danger_zone">Danger Zone</string>
     <string name="instance_danger_zone_desc">These actions affect the instance registration or local files. Double-check before continuing.</string>
     <string name="instance_delete_desc">Permanently deletes this instance from your device, including worlds, configs, and installed content.</string>
@@ -409,6 +419,20 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="add_at_least_one_layer">Add at least one layer</string>
     <string name="world_created_successfully">World created successfully</string>
     <string name="failed_to_create_world">Failed to create world</string>
+    <string name="custom_flat_world_subtitle">Create a world with your own biome and block layers</string>
+    <string name="world_settings">World Settings</string>
+    <string name="world_settings_hint">Choose the basic settings for the new world</string>
+    <string name="layers_title">Layers</string>
+    <string name="add_layer_compact">Add Layer</string>
+    <string name="no_layers_title">No layers yet</string>
+    <string name="no_layers_hint">Add at least one block layer to create the world</string>
+    <string name="reorder_layer">Reorder layer</string>
+    <string name="delete_layer">Delete layer</string>
+    <string name="block_id_hint">minecraft:stone</string>
+    <plurals name="flat_layers_count">
+        <item quantity="one">%1$d layer • bottom → top</item>
+        <item quantity="other">%1$d layers • bottom → top</item>
+    </plurals>
 
     <!-- Play Store Validation -->
     <string name="minecraft_playstore_required_title">Play Store Version Required</string>
@@ -424,6 +448,56 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="total_mods">Total Mods:</string>
     <string name="enabled_mods">Enabled:</string>
     <string name="add_mod">Add Mod</string>
+    <string name="scan_downloads">Scan</string>
+    <string name="scan_downloads_scanning">Scanning…</string>
+    <string name="scan_downloads_none_found">No .levipack or .so mods found in Downloads</string>
+    <string name="scan_downloads_failed">Could not scan Downloads</string>
+    <string name="scan_downloads_permission_denied">Storage access is needed to scan Downloads</string>
+    <string name="scan_downloads_results_title">Mods in Downloads</string>
+    <string name="scan_downloads_results_subtitle">Choose a mod to add. Scan checks only the main Downloads folder.</string>
+    <string name="scan_downloads_add">Add</string>
+    <string name="scan_downloads_adding">Adding…</string>
+    <string name="scan_downloads_added">Added</string>
+    <string name="scan_downloads_added_message">%1$s added</string>
+    <string name="scan_downloads_levipack">LeviPack</string>
+    <string name="scan_downloads_native_library">Native library</string>
+    <string name="scan_downloads_file_details">%1$s • %2$s</string>
+    <string name="external_mods">External Mods</string>
+    <string name="external_mods_subtitle">Community mods for Minecraft %1$s</string>
+    <string name="external_mods_no_version">Select a Minecraft version before installing mods</string>
+    <string name="external_mods_search_hint">Search mods, authors, or versions…</string>
+    <string name="external_mods_compatible_only">Compatible only</string>
+    <string name="external_mods_all_versions">All Minecraft versions</string>
+    <string name="external_mods_sort_newest">Newest</string>
+    <string name="external_mods_sort_name">Name A–Z</string>
+    <string name="external_mods_empty">No mods match these filters</string>
+    <string name="external_mods_load_failed">Could not refresh the catalog. Showing the saved copy.</string>
+    <string name="external_mods_refresh">Refresh catalog</string>
+    <string name="external_mods_refreshed">Catalog refreshed</string>
+    <string name="external_mods_join_discord">Join Community Discord</string>
+    <string name="external_mods_discord_open_failed">No app can open the Discord invite</string>
+    <string name="external_mods_download">Downloading %1$s</string>
+    <string name="external_mods_choose_download">Choose download</string>
+    <string name="external_mods_download_file">Mod %1$s • %2$s</string>
+    <string name="external_mods_verification_failed">Download verification failed</string>
+    <string name="external_mods_importing">Importing mod…</string>
+    <string name="external_mods_installed">%1$s installed</string>
+    <string name="external_mods_install_failed">Could not install %1$s: %2$s</string>
+    <string name="external_mods_open_failed">No browser can open this download</string>
+    <string name="external_mods_direct_download">Direct download</string>
+    <string name="external_mods_ad_download">Ad download</string>
+    <string name="external_mods_external_link">External link</string>
+    <string name="external_mods_open_link">Open Link</string>
+    <string name="external_mods_external_dialog_title">External Download</string>
+    <string name="external_mods_ad_dialog_title">Ad-Supported Download</string>
+    <string name="external_mods_external_dialog_message">%1$s uses a download page outside LeviLauncher.\n\n1. Tap Open Link and download the .levipack or .so file.\n2. Return to LeviLauncher and open Mods.\n3. Tap Scan.\n4. Tap Add next to the mod you want to import.\n\nScan checks only the main Downloads folder. Move the file there if your browser saved it somewhere else.</string>
+    <string name="external_mods_ad_dialog_message">%1$s uses an ad-supported download page chosen by its developer. LeviLauncher does not control that page or its ads.\n\n1. Tap Open Link and download the .levipack or .so file.\n2. Return to LeviLauncher and open Mods.\n3. Tap Scan.\n4. Tap Add next to the mod you want to import.\n\nScan checks only the main Downloads folder. Only download the mod file; do not install unrelated apps or allow notifications.</string>
+    <string name="external_mods_by_author">by %1$s</string>
+    <string name="external_mods_version">Mod %1$s</string>
+    <string name="external_mods_minecraft_versions">Minecraft %1$s</string>
+    <string name="external_mods_update">Update</string>
+    <string name="external_mods_installed_button">Installed</string>
+    <string name="external_mods_incompatible">Incompatible</string>
 
     <!-- Mod Detail -->
     <string name="mod_detail_title">Mod Details</string>
@@ -591,6 +665,12 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="dialog_message_exit_app">Are you sure you want to exit?</string>
     <string name="dialog_positive_exit">Exit</string>
     <string name="show_logcat_overlay">Logcat overlay</string>
+    <string name="foreground_service">Foreground service</string>
+    <string name="foreground_service_desc">Keep Minecraft running when you switch apps by preventing Bedrock from suspending the active session and keeping the process, CPU, and Wi-Fi active.</string>
+    <string name="foreground_service_warning">Note: May make your phone heat up faster and increase battery usage.</string>
+    <string name="foreground_service_channel">Minecraft background protection</string>
+    <string name="foreground_service_notification_title">Minecraft is being kept active</string>
+    <string name="foreground_service_notification_text">Minecraft background mode is active. CPU and network access are being kept available for the current session.</string>
     <string name="logcat_live">Logcat: <b>live</b></string>
     <string name="logcat_paused">Logcat: paused</string>
     <!-- Logcat Overlay i18n -->
@@ -703,6 +783,8 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="mod_menu_notifications_desc">Show notification when enabling mods</string>
     <string name="mod_menu_opacity">Mod Menu Opacity</string>
     <string name="mod_menu_button_opacity">Mod Menu Button Opacity</string>
+    <string name="mod_menu_compact">Compact Mod Menu</string>
+    <string name="mod_menu_compact_desc">Use a smaller menu with a dense module list and compact filters</string>
     <string name="mod_menu_version">v1.0</string>
     <string name="mod_menu_enabled">Mod Menu enabled</string>
     <string name="mod_menu_disabled">Mod Menu disabled</string>
@@ -722,6 +804,10 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="mod_config_auto_sprint_keybind">Auto Sprint Keybind</string>
     <string name="mod_config_zoom_keybind">Zoom Keybind</string>
     <string name="mod_config_zoom_transition">Transition Duration (ms)</string>
+    <string name="mod_config_gyro_sensitivity_multiplier" formatted="false">Sensitivity Multiplier (100% = 1x)</string>
+    <string name="mod_config_gyro_horizontal_speed" formatted="false">Horizontal Speed (%)</string>
+    <string name="mod_config_gyro_vertical_speed" formatted="false">Vertical Speed (%)</string>
+    <string name="mod_config_gyro_small_movement_filter">Small Movement Filter (0 = Off)</string>
     <string name="mod_config_gyro_sensitivity_x" formatted="false">Horizontal Sensitivity (%)</string>
     <string name="mod_config_gyro_sensitivity_y" formatted="false">Vertical Sensitivity (%)</string>
     <string name="mod_config_gyro_invert_x">Invert Horizontal Axis</string>
@@ -734,6 +820,8 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="mod_config_color_green_short">G</string>
     <string name="mod_config_color_blue_short">B</string>
     <string name="mod_config_color_hex_hint" formatted="false">#AARRGGBB</string>
+    <string name="hud_editor_drag_hint">Drag to move panel</string>
+    <string name="hud_editor_drag_description">HUD Editor. Drag this area to move the panel.</string>
 
     <!-- Options Editor -->
     <string name="edit_options">Edit Options</string>
@@ -994,6 +1082,7 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="inbuilt_mod_hotbar_slot_desc">Adds separate 1–9 buttons for selecting hotbar slots</string>
     <string name="hotbar_slot_content_description">Hotbar slot %1$d</string>
     <string name="mod_config_hotbar_item_icons">Use item icons from hotbar</string>
+    <string name="mod_config_hotbar_item_counts">Show item count</string>
     <string name="mod_config_hotbar_slot_enabled">Show hotbar slot %1$d</string>
     <string name="mod_config_hotbar_slot_size">Hotbar slot %1$d size (dp)</string>
     <string name="mod_config_hotbar_slot_opacity">Hotbar slot %1$d opacity</string>
@@ -1012,4 +1101,38 @@ Migration must complete before LeviLauncher can continue.</string>
     <string name="news_unread_description">Launcher news, %1$d unread</string>
     <string name="news_notification_channel">Launcher news</string>
     <string name="news_notification_channel_description">New LeviLauncher announcements and important notices</string>
+    <string name="mod_config_category_slots">Slots</string>
+    <string name="mod_config_category_appearance">Appearance</string>
+    <string name="mod_config_category_behavior">Behavior</string>
+    <string name="mod_config_category_motion">Motion</string>
+    <string name="mod_config_category_button">Button</string>
+    <string name="mod_config_visible_slots">Visible Slots</string>
+    <string name="mod_config_hotbar_slot_section">Hotbar Slot %1$d</string>
+
+    <string name="select">Select</string>
+    <string name="select_all">Select All</string>
+    <string name="selected">Selected</string>
+    <string name="selected_count_zero">0 selected</string>
+    <string name="selected_count">%1$d selected</string>
+    <string name="more_actions">More actions</string>
+    <string name="world_meta">%1$s • %2$s</string>
+    <string name="pack_meta">v%1$s • %2$s</string>
+    <string name="no_worlds_found">No worlds found</string>
+    <string name="no_worlds_message">Your worlds will appear here.</string>
+    <string name="no_packs_found">No packs found</string>
+    <string name="no_packs_message">Installed packs will appear here.</string>
+    <string name="no_servers_found">No servers found</string>
+    <string name="no_servers_message">Saved servers will appear here.</string>
+    <string name="no_screenshots_found">No screenshots found</string>
+    <string name="no_screenshots_message">Minecraft screenshots will appear here.</string>
+    <string name="no_search_results">No results for “%1$s”</string>
+    <string name="batch_delete_worlds_title">Delete selected worlds?</string>
+    <string name="batch_delete_worlds_message">Delete %1$d selected worlds? Backups will be created before deletion.</string>
+    <string name="batch_delete_packs_title">Delete selected packs?</string>
+    <string name="batch_delete_packs_message">Delete %1$d selected packs?</string>
+    <string name="batch_exporting">Exporting %1$d of %2$d…</string>
+    <string name="batch_deleting">Deleting %1$d of %2$d…</string>
+    <string name="batch_transferring">Transferring %1$d of %2$d…</string>
+    <string name="batch_result">%1$d completed, %2$d failed</string>
+    <string name="choose_export_folder">Choose export folder</string>
 </resources>

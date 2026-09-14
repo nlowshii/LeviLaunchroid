@@ -3,6 +3,10 @@ package org.levimc.launcher.core.mods.inbuilt;
 import android.app.Activity;
 import android.content.Context;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import org.levimc.launcher.R;
 import org.levimc.launcher.core.mods.inbuilt.manager.InbuiltModManager;
 import org.levimc.launcher.core.mods.inbuilt.model.ModIds;
@@ -26,12 +30,14 @@ public final class InbuiltModuleProvider {
     private static final String CFG_ZOOM_LEVEL = "zoom_level";
     private static final String CFG_ZOOM_TRANSITION = "zoom_transition";
     private static final String CFG_ZOOM_KEYBIND = "zoom_keybind";
+    private static final String CFG_GYRO_SENSITIVITY_MULTIPLIER = "gyro_sensitivity_multiplier";
     private static final String CFG_GYRO_SENSITIVITY_X = "gyro_sensitivity_x";
     private static final String CFG_GYRO_SENSITIVITY_Y = "gyro_sensitivity_y";
     private static final String CFG_GYRO_INVERT_X = "gyro_invert_x";
     private static final String CFG_GYRO_INVERT_Y = "gyro_invert_y";
     private static final String CFG_GYRO_DEADZONE = "gyro_deadzone";
     private static final String CFG_HOTBAR_ITEM_ICONS = "hotbar_item_icons";
+    private static final String CFG_HOTBAR_ITEM_COUNTS = "hotbar_item_counts";
     private static final String CFG_HOTBAR_SLOT_PREFIX = "hotbar_slot_";
     private static final String CFG_HOTBAR_SLOT_ENABLED = "enabled";
     private static final String CFG_HOTBAR_SLOT_SIZE = "size";
@@ -99,7 +105,7 @@ public final class InbuiltModuleProvider {
                 ? overlayManager.isModActive(id)
                 : manager.resolveInbuiltModEnabled(id, false);
         boolean customConfig = ModIds.POJAV_CONTROLS.equals(id) || ModIds.MORE_BUTTONS.equals(id);
-        return new UnifiedMod(
+        UnifiedMod result = new UnifiedMod(
                 id,
                 activity.getString(nameRes),
                 activity.getString(descRes),
@@ -116,6 +122,78 @@ public final class InbuiltModuleProvider {
                         ? mod -> PojavControls.launchEditor(activity)
                         : (ModIds.MORE_BUTTONS.equals(id) ? mod -> MoreButtonsEditor.show(activity) : null)
         );
+        result.setLocalConfigSchema(createLocalConfigSchema(activity, result));
+        return result;
+    }
+
+    private static RuntimeConfigSchema createLocalConfigSchema(Context context, UnifiedMod mod) {
+        boolean hotbar = ModIds.HOTBAR_SLOT.equals(mod.getId());
+        if (!hotbar && !ModIds.GYRO.equals(mod.getId())) return null;
+        try {
+            JSONArray categories = new JSONArray();
+            JSONArray nodes = new JSONArray();
+            if (hotbar) {
+                categories.put(configCategory(context, "slots", R.string.mod_config_category_slots));
+                categories.put(configCategory(context, "appearance", R.string.mod_config_category_appearance));
+                categories.put(configCategory(context, "behavior", R.string.mod_config_category_behavior));
+                nodes.put(configNode(mod, CFG_HOTBAR_ITEM_ICONS, "slots"));
+                nodes.put(configNode(mod, CFG_HOTBAR_ITEM_COUNTS, "slots"));
+                JSONArray slots = new JSONArray();
+                for (int slot = 1; slot <= 9; slot++) {
+                    String key = hotbarSlotConfigKey(slot, CFG_HOTBAR_SLOT_ENABLED);
+                    slots.put(new JSONObject().put("key", key).put("value", key)
+                            .put("label", mod.findConfigEntry(key).displayName));
+                    String section = "slot_" + slot;
+                    nodes.put(new JSONObject().put("id", section).put("type", "section")
+                            .put("category", "appearance").put("collapsible", true)
+                            .put("title", context.getString(R.string.mod_config_hotbar_slot_section, slot)));
+                    nodes.put(configNode(mod, hotbarSlotConfigKey(slot, CFG_HOTBAR_SLOT_SIZE), "appearance")
+                            .put("section", section));
+                    nodes.put(configNode(mod, hotbarSlotConfigKey(slot, CFG_HOTBAR_SLOT_OPACITY), "appearance")
+                            .put("section", section));
+                }
+                nodes.put(new JSONObject().put("id", "visible_slots").put("type", "toggle_group")
+                        .put("category", "slots").put("title", context.getString(R.string.mod_config_visible_slots))
+                        .put("options", slots));
+                nodes.put(configNode(mod, CFG_OVERLAY_LOCK, "behavior"));
+                nodes.put(configNode(mod, CFG_OVERLAY_SHOW_EVERYWHERE, "behavior"));
+            } else {
+                categories.put(configCategory(context, "motion", R.string.mod_config_category_motion));
+                categories.put(configCategory(context, "button", R.string.mod_config_category_button));
+                nodes.put(configNode(mod, CFG_GYRO_SENSITIVITY_X, "motion"));
+                nodes.put(configNode(mod, CFG_GYRO_SENSITIVITY_Y, "motion"));
+                nodes.put(configNode(mod, CFG_GYRO_INVERT_X, "motion"));
+                nodes.put(configNode(mod, CFG_GYRO_INVERT_Y, "motion"));
+                nodes.put(configNode(mod, CFG_GYRO_DEADZONE, "motion"));
+                nodes.put(configNode(mod, CFG_OVERLAY_SIZE, "button"));
+                nodes.put(configNode(mod, CFG_OVERLAY_OPACITY, "button"));
+                nodes.put(configNode(mod, CFG_OVERLAY_LOCK, "button"));
+                nodes.put(configNode(mod, CFG_OVERLAY_SHOW_EVERYWHERE, "button"));
+            }
+            return RuntimeConfigSchema.parse(new JSONObject().put("version", 2)
+                    .put("default_category", hotbar ? "slots" : "motion")
+                    .put("categories", categories).put("nodes", nodes).toString());
+        } catch (JSONException e) {
+            throw new IllegalStateException("Unable to build inbuilt config schema", e);
+        }
+    }
+
+    private static JSONObject configCategory(Context context, String id, int titleRes) throws JSONException {
+        return new JSONObject().put("id", id).put("title", context.getString(titleRes));
+    }
+
+    private static JSONObject configNode(UnifiedMod mod, String key, String category) throws JSONException {
+        UnifiedMod.ConfigEntry config = mod.findConfigEntry(key);
+        JSONObject node = new JSONObject().put("id", key).put("key", key)
+                .put("category", category).put("title", config.displayName)
+                .put("type", config.type == UnifiedMod.ConfigType.TOGGLE ? "toggle" : "slider_int")
+                .put("default_value", config.defaultValue)
+                .put("min_value", config.minValue).put("max_value", config.maxValue);
+        if (!config.dependsOn.isEmpty()) {
+            node.put("enabled_when", new JSONArray().put(new JSONObject()
+                    .put("key", config.dependsOn).put("op", "truthy")));
+        }
+        return node;
     }
 
     private static List<UnifiedMod.ConfigEntry> createConfigs(Context context,
@@ -133,7 +211,7 @@ public final class InbuiltModuleProvider {
                 configs.add(config(CFG_OVERLAY_OPACITY,
                         context.getString(R.string.mod_config_overlay_opacity_percent),
                         UnifiedMod.ConfigType.SLIDER_INT,
-                        "100", "10", "100",
+                        "100", "0", "100",
                         String.valueOf(manager.getOverlayOpacity(modId))));
             }
             configs.add(config(CFG_OVERLAY_LOCK,
@@ -154,6 +232,11 @@ public final class InbuiltModuleProvider {
                     UnifiedMod.ConfigType.TOGGLE,
                     "false", "", "",
                     String.valueOf(manager.isHotbarItemIconsEnabled())));
+            configs.add(config(CFG_HOTBAR_ITEM_COUNTS,
+                    context.getString(R.string.mod_config_hotbar_item_counts),
+                    UnifiedMod.ConfigType.TOGGLE,
+                    "false", "", "",
+                    String.valueOf(manager.isHotbarItemCountsEnabled())));
             for (int slot = 1; slot <= 9; slot++) {
                 String enabledKey = hotbarSlotConfigKey(slot, CFG_HOTBAR_SLOT_ENABLED);
                 String overlayKey = ModIds.HOTBAR_SLOT + ":" + slot;
@@ -170,7 +253,7 @@ public final class InbuiltModuleProvider {
                 configs.add(config(hotbarSlotConfigKey(slot, CFG_HOTBAR_SLOT_OPACITY),
                         context.getString(R.string.mod_config_hotbar_slot_opacity, slot),
                         UnifiedMod.ConfigType.SLIDER_INT,
-                        "100", "10", "100",
+                        "100", "0", "100",
                         String.valueOf(manager.getOverlayOpacity(overlayKey)), enabledKey));
             }
         }
@@ -204,13 +287,18 @@ public final class InbuiltModuleProvider {
                     "", "", "",
                     String.valueOf(manager.getZoomKeybind())));
         } else if (ModIds.GYRO.equals(modId)) {
+            configs.add(config(CFG_GYRO_SENSITIVITY_MULTIPLIER,
+                    context.getString(R.string.mod_config_gyro_sensitivity_multiplier),
+                    UnifiedMod.ConfigType.SLIDER_INT,
+                    "100", "25", "5000",
+                    String.valueOf(manager.getGyroSensitivityMultiplier())));
             configs.add(config(CFG_GYRO_SENSITIVITY_X,
-                    context.getString(R.string.mod_config_gyro_sensitivity_x),
+                    context.getString(R.string.mod_config_gyro_horizontal_speed),
                     UnifiedMod.ConfigType.SLIDER_INT,
                     "100", "10", "300",
                     String.valueOf(manager.getGyroSensitivityX())));
             configs.add(config(CFG_GYRO_SENSITIVITY_Y,
-                    context.getString(R.string.mod_config_gyro_sensitivity_y),
+                    context.getString(R.string.mod_config_gyro_vertical_speed),
                     UnifiedMod.ConfigType.SLIDER_INT,
                     "100", "10", "300",
                     String.valueOf(manager.getGyroSensitivityY())));
@@ -225,9 +313,9 @@ public final class InbuiltModuleProvider {
                     "false", "", "",
                     String.valueOf(manager.isGyroInvertY())));
             configs.add(config(CFG_GYRO_DEADZONE,
-                    context.getString(R.string.mod_config_gyro_deadzone),
+                    context.getString(R.string.mod_config_gyro_small_movement_filter),
                     UnifiedMod.ConfigType.SLIDER_INT,
-                    "5", "0", "50",
+                    "5", "0", "100",
                     String.valueOf(manager.getGyroDeadzone())));
         }
         return configs;
@@ -294,6 +382,9 @@ public final class InbuiltModuleProvider {
             case CFG_ZOOM_KEYBIND:
                 manager.setZoomKeybind(parseInt(value, manager.getZoomKeybind()));
                 break;
+            case CFG_GYRO_SENSITIVITY_MULTIPLIER:
+                manager.setGyroSensitivityMultiplier(parseInt(value, manager.getGyroSensitivityMultiplier()));
+                break;
             case CFG_GYRO_SENSITIVITY_X:
                 manager.setGyroSensitivityX(parseInt(value, manager.getGyroSensitivityX()));
                 break;
@@ -311,6 +402,9 @@ public final class InbuiltModuleProvider {
                 break;
             case CFG_HOTBAR_ITEM_ICONS:
                 manager.setHotbarItemIconsEnabled(parseBoolean(value));
+                break;
+            case CFG_HOTBAR_ITEM_COUNTS:
+                manager.setHotbarItemCountsEnabled(parseBoolean(value));
                 break;
             default:
                 break;

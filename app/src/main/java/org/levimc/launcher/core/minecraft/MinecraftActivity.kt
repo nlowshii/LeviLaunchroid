@@ -1,10 +1,12 @@
 package org.levimc.launcher.core.minecraft
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.res.AssetManager
 import android.graphics.Color
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.text.InputType
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -22,11 +24,17 @@ import org.levimc.launcher.core.mods.ModManager
 import org.levimc.launcher.core.mods.inbuilt.nativemod.PojavControlsMod
 import org.levimc.launcher.core.mods.inbuilt.overlay.InbuiltOverlayManager
 import org.levimc.launcher.preloader.PreloaderInput
+import org.levimc.launcher.settings.FeatureSettings
 import org.levimc.pojavcontrols.PojavControls
 import org.levimc.pojavcontrols.PojavControlsHost
 import java.io.File
+import java.io.FileOutputStream
 
 class MinecraftActivity : MainActivity(), PojavControlsHost {
+
+    companion object {
+        private const val PRELOADER_DOCUMENT_REQUEST = 0x4C50
+    }
 
     private lateinit var gameManager: GamePackageManager
     private lateinit var trace: LaunchTrace
@@ -110,6 +118,7 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
         trace.mark("Native mod enable started")
         ModManager.enableLoadedMods()
         trace.mark("Native mod enable finished")
+        setLeviKeepRunningInBackground(FeatureSettings.getInstance().isForegroundServiceEnabled())
         trace.mark("Mojang MainActivity super.onCreate starting")
         try {
             gameRuntimeStarted = true
@@ -120,6 +129,8 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
             return
         }
         trace.mark("Mojang MainActivity super.onCreate finished")
+
+        MinecraftForegroundService.startIfEnabled(this)
 
         val launchVertically = intent.getBooleanExtra("LAUNCH_VERTICALLY", false)
         if (launchVertically) {
@@ -185,11 +196,61 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == PRELOADER_DOCUMENT_REQUEST) {
+            handlePreloaderDocumentResult(resultCode, data)
+            return
+        }
+        if (org.levimc.launcher.core.mods.inbuilt.overlay.MoreButtonsEditor.onActivityResult(requestCode, resultCode, data)) return
         if (PojavControls.onActivityResult(requestCode, resultCode, data)) return
         super.onActivityResult(requestCode, resultCode, data)
     }
 
+    fun openPreloaderDocumentPicker(mimeType: String) {
+        runOnUiThread {
+            try {
+                val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = mimeType.ifBlank { "*/*" }
+                }
+                startActivityForResult(picker, PRELOADER_DOCUMENT_REQUEST)
+            } catch (throwable: Throwable) {
+                PreloaderInput.onDocumentResult(false, "", "", throwable.message ?: "Unable to open document picker")
+            }
+        }
+    }
+
+    private fun handlePreloaderDocumentResult(resultCode: Int, data: Intent?) {
+        if (resultCode != Activity.RESULT_OK || data?.data == null) {
+            PreloaderInput.onDocumentResult(false, "", "", "Import cancelled")
+            return
+        }
+        val uri = data.data ?: return
+        var temporaryFile: File? = null
+        try {
+            var displayName = "selected_file"
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) displayName = cursor.getString(index) ?: displayName
+                }
+            }
+            val safeName = displayName.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(120).ifBlank { "selected_file" }
+            val directory = File(cacheDir, "preloader_documents").also { it.mkdirs() }
+            val importedFile = File(directory, "${System.nanoTime()}_$safeName")
+            temporaryFile = importedFile
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(importedFile).use { output -> input.copyTo(output) }
+            } ?: throw IllegalStateException("Unable to read selected document")
+            PreloaderInput.onDocumentResult(true, importedFile.absolutePath, displayName, "")
+        } catch (throwable: Throwable) {
+            PreloaderInput.onDocumentResult(false, "", "", throwable.message ?: "Unable to import selected document")
+        } finally {
+            temporaryFile?.delete()
+        }
+    }
+
     override fun onBackPressed() {
+        if (org.levimc.launcher.core.mods.inbuilt.overlay.MoreButtonsEditor.closeEditor()) return
         if (PojavControls.closeEditor()) return
         super.onBackPressed()
     }
@@ -201,6 +262,7 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
             normalExitRestartScheduled = false
         }
         MinecraftActivityState.onResumed(this)
+        org.levimc.launcher.core.mods.inbuilt.overlay.MoreButtonsEditor.onResume()
 
         if (overlayManager == null) {
             startInbuiltModServices()
@@ -236,6 +298,11 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isTextWidgetActive() &&
+            (event.keyCode == KeyEvent.KEYCODE_ESCAPE || event.keyCode == KeyEvent.KEYCODE_BACK)) {
+            return super.dispatchKeyEvent(event)
+        }
+
         val mouseButton = getMouseButton(event)
         if (mouseButton != 0 &&
             (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP) &&
@@ -269,13 +336,13 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
             return true
         }
 
-        if (PojavControls.ownsTouchInput()) {
-            return super.dispatchTouchEvent(event)
-        }
-
         if (org.levimc.launcher.core.mods.inbuilt.overlay.VirtualCursorMod.isActive()) {
             org.levimc.launcher.core.mods.inbuilt.overlay.VirtualCursorMod.processTouchEvent(event, this)
             return true
+        }
+
+        if (PojavControls.ownsTouchInput()) {
+            return super.dispatchTouchEvent(event)
         }
 
         val actionIndex = event.actionIndex
@@ -360,6 +427,7 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
     override fun onPause() {
         val shouldRestartAfterNormalExit = shouldRestartAfterNormalExit()
         if (shouldRestartAfterNormalExit) {
+            PreloaderInput.cancelDocumentRequest("Minecraft closed")
             ModManager.disableAndUnloadLoadedMods()
             prepareNormalExitCleanup()
             scheduleNormalExitProcessRestart()
@@ -369,6 +437,7 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
     }
 
     override fun onDestroy() {
+        PreloaderInput.cancelDocumentRequest("Minecraft closed")
         ModManager.disableAndUnloadLoadedMods()
         val shouldPrepareNormalExit = shouldRestartAfterNormalExit()
         if (shouldPrepareNormalExit) {
@@ -381,6 +450,8 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
         MinecraftActivityState.onDestroyed(this)
         MinecraftLaunchSession.clear()
         stopInbuiltModServices()
+        setLeviKeepRunningInBackground(false)
+        MinecraftForegroundService.stop(this)
 
         try {
             super.onDestroy()
