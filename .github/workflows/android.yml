@@ -102,7 +102,9 @@ jobs:
           distribution: temurin
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Accept Licenses
         run: yes | sdkmanager --licenses
@@ -140,7 +142,7 @@ jobs:
 
       - name: Compile Debug Without Firebase Secrets
         if: env.HAS_GOOGLE_SERVICES == 'false'
-        run: ./gradlew :app:compileDebugKotlin :app:compileDebugJavaWithJavac
+        run: ./gradlew :app:assembleDebug
 
       - name: Upload Debug APK
         if: env.HAS_GOOGLE_SERVICES == 'true'
