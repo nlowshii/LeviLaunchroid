@@ -266,6 +266,7 @@ final class PojavControlOverlay extends ViewGroup {
             }
             clampVirtualCursor();
             host.pojavSendPointer(virtualCursorX, virtualCursorY);
+            PaperDollBridge.updateCursor(virtualCursorX, virtualCursorY);
         }
         cursorView.setVisibility(enabled && host.pojavIsMenuOpen() ? VISIBLE : GONE);
         updateVirtualMouseButtons();
@@ -295,6 +296,7 @@ final class PojavControlOverlay extends ViewGroup {
         cursorView.layout(x, y, x + cursorView.getMeasuredWidth(), y + cursorView.getMeasuredHeight());
         cursorView.invalidate();
         host.pojavSendPointer(virtualCursorX, virtualCursorY);
+        PaperDollBridge.updateCursor(virtualCursorX, virtualCursorY);
     }
 
     private void clampVirtualCursor() {
