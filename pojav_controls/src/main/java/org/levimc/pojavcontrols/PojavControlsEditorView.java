@@ -25,6 +25,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -175,31 +176,20 @@ final class PojavControlsEditorView extends FrameLayout {
                 notifyProfileChanged();
                 Toast.makeText(activity, R.string.pojav_controls_imported, Toast.LENGTH_SHORT).show();
             } else if (requestCode == REQUEST_CURSOR_IMAGE) {
-                int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
-                    try {
-                        activity.getContentResolver().takePersistableUriPermission(uri, flags);
-                    } catch (SecurityException ignored) {
-                    }
-                }
-                profile.virtualMouseImageUri = uri.toString();
+                deleteInternalAsset(profile.virtualMouseImageUri);
+                profile.virtualMouseImageUri = copyToInternalAsset(uri, "cursor_image").toString();
                 saveCurrent(false);
                 Toast.makeText(activity, R.string.pojav_controls_image_selected, Toast.LENGTH_SHORT).show();
             } else if (frameRequest) {
                 profile.normalize();
                 int slot = requestCode - REQUEST_CURSOR_FRAME_BASE;
-                profile.virtualMouseFrameUris.set(slot, uri.toString());
+                deleteInternalAsset(profile.virtualMouseFrameUris.get(slot));
+                profile.virtualMouseFrameUris.set(slot, copyToInternalAsset(uri, "cursor_frame_" + slot).toString());
                 saveCurrent(false);
                 Toast.makeText(activity, R.string.pojav_controls_frame_selected, Toast.LENGTH_SHORT).show();
             } else if (requestCode == REQUEST_CURSOR_SOUND) {
-                int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
-                    try {
-                        activity.getContentResolver().takePersistableUriPermission(uri, flags);
-                    } catch (SecurityException ignored) {
-                    }
-                }
-                profile.virtualMouseClickSoundUri = uri.toString();
+                deleteInternalAsset(profile.virtualMouseClickSoundUri);
+                profile.virtualMouseClickSoundUri = copyToInternalAsset(uri, "cursor_sound").toString();
                 saveCurrent(false);
                 Toast.makeText(activity, R.string.pojav_controls_sound_selected, Toast.LENGTH_SHORT).show();
             } else {
@@ -213,6 +203,45 @@ final class PojavControlsEditorView extends FrameLayout {
             Toast.makeText(activity, R.string.pojav_controls_invalid, Toast.LENGTH_LONG).show();
         }
         return true;
+    }
+
+    private Uri copyToInternalAsset(Uri source, String baseName) throws java.io.IOException {
+        File dir = new File(activity.getFilesDir(), "pojav_controls/assets");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new java.io.IOException("Unable to create assets directory");
+        File target = new File(dir, baseName + "_" + System.currentTimeMillis() + guessExtension(source));
+        try (InputStream input = activity.getContentResolver().openInputStream(source);
+             OutputStream output = new java.io.FileOutputStream(target)) {
+            if (input == null) throw new java.io.IOException("Unable to open source");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+        }
+        return Uri.fromFile(target);
+    }
+
+    private void deleteInternalAsset(String storedUri) {
+        if (storedUri == null || storedUri.isEmpty()) return;
+        Uri uri = Uri.parse(storedUri);
+        if (!"file".equals(uri.getScheme())) return;
+        String path = uri.getPath();
+        if (path == null) return;
+        File file = new File(path);
+        File assetsDir = new File(activity.getFilesDir(), "pojav_controls/assets");
+        if (file.getAbsolutePath().startsWith(assetsDir.getAbsolutePath())) file.delete();
+    }
+
+    private String guessExtension(Uri uri) {
+        String type = activity.getContentResolver().getType(uri);
+        if (type != null) {
+            String mapped = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(type);
+            if (mapped != null && !mapped.isEmpty()) return "." + mapped;
+        }
+        String path = uri.getLastPathSegment();
+        if (path != null) {
+            int dot = path.lastIndexOf('.');
+            if (dot >= 0 && dot < path.length() - 1) return path.substring(dot);
+        }
+        return ".bin";
     }
 
     private Button toolbarButton(int text, View.OnClickListener listener) {
@@ -561,31 +590,108 @@ final class PojavControlsEditorView extends FrameLayout {
             mapping.setOnClickListener(view -> showMappingDialog(selectedCodes, mapping));
         }
 
+        final int maxActions = ControlData.MAX_MACRO_ACTIONS;
         final CheckBox[] macroEnabledBox = new CheckBox[1];
+        final Spinner[] macroTriggerSpinner = new Spinner[1];
         final Spinner[] macroCountSpinner = new Spinner[1];
-        final int[][] macroSelectedCodes = new int[4][];
-        final EditText[] macroDelayInputs = new EditText[3];
-        final Spinner[] macroDelayUnits = new Spinner[3];
-        final LinearLayout[] macroRows = new LinearLayout[4];
+        final int[][] macroSelectedCodes = new int[maxActions][];
+        final EditText[] macroDelayInputs = new EditText[maxActions - 1];
+        final Spinner[] macroDelayUnits = new Spinner[maxActions - 1];
+        final LinearLayout[] macroRows = new LinearLayout[maxActions];
+        final EditText[] macroLongPressField = new EditText[1];
+        final EditText[] macroTapWindowField = new EditText[1];
+        final EditText[] macroMultiClickField = new EditText[1];
+        final EditText[] macroRapidCpsField = new EditText[1];
+        final LinearLayout[] macroLongPressRow = new LinearLayout[1];
+        final LinearLayout[] macroTapWindowRow = new LinearLayout[1];
+        final LinearLayout[] macroMultiClickRow = new LinearLayout[1];
+        final LinearLayout[] macroRapidCpsRow = new LinearLayout[1];
         if (target.type == ControlEditorCanvas.EditorTarget.BUTTON ||
                 target.type == ControlEditorCanvas.EditorTarget.DRAWER_BUTTON) {
             addLabel(form, R.string.pojav_controls_macro);
             macroEnabledBox[0] = check(form, R.string.pojav_controls_macro_enabled, target.data.macroEnabled);
+
+            addLabel(form, R.string.pojav_controls_macro_trigger);
+            Spinner triggerSpinner = new Spinner(activity);
+            triggerSpinner.setAdapter(new ArrayAdapter<>(activity,
+                    android.R.layout.simple_spinner_dropdown_item, new String[]{
+                    activity.getString(R.string.pojav_controls_macro_trigger_click),
+                    activity.getString(R.string.pojav_controls_macro_trigger_long_press),
+                    activity.getString(R.string.pojav_controls_macro_trigger_double_tap),
+                    activity.getString(R.string.pojav_controls_macro_trigger_triple_tap),
+                    activity.getString(R.string.pojav_controls_macro_trigger_multi_click),
+                    activity.getString(R.string.pojav_controls_macro_trigger_rapid_click)}));
+            triggerSpinner.setSelection(Math.max(0, Math.min(ControlData.MACRO_TRIGGER_COUNT - 1, target.data.macroTriggerType)));
+            form.addView(triggerSpinner);
+            macroTriggerSpinner[0] = triggerSpinner;
+
+            LinearLayout longPressRow = new LinearLayout(activity);
+            longPressRow.setOrientation(LinearLayout.VERTICAL);
+            macroLongPressField[0] = field(longPressRow, R.string.pojav_controls_macro_long_press_ms,
+                    Long.toString(target.data.macroLongPressMs));
+            form.addView(longPressRow);
+            macroLongPressRow[0] = longPressRow;
+
+            LinearLayout tapWindowRow = new LinearLayout(activity);
+            tapWindowRow.setOrientation(LinearLayout.VERTICAL);
+            macroTapWindowField[0] = field(tapWindowRow, R.string.pojav_controls_macro_tap_window_ms,
+                    Long.toString(target.data.macroTapWindowMs));
+            form.addView(tapWindowRow);
+            macroTapWindowRow[0] = tapWindowRow;
+
+            LinearLayout multiClickRow = new LinearLayout(activity);
+            multiClickRow.setOrientation(LinearLayout.VERTICAL);
+            macroMultiClickField[0] = field(multiClickRow, R.string.pojav_controls_macro_multi_click_count,
+                    Integer.toString(target.data.macroMultiClickCount));
+            form.addView(multiClickRow);
+            macroMultiClickRow[0] = multiClickRow;
+
+            LinearLayout rapidCpsRow = new LinearLayout(activity);
+            rapidCpsRow.setOrientation(LinearLayout.VERTICAL);
+            macroRapidCpsField[0] = field(rapidCpsRow, R.string.pojav_controls_macro_rapid_cps,
+                    Float.toString(target.data.macroRapidClickCps));
+            form.addView(rapidCpsRow);
+            macroRapidCpsRow[0] = rapidCpsRow;
+
+            Runnable updateTriggerRowVisibility = () -> {
+                int trigger = macroTriggerSpinner[0].getSelectedItemPosition();
+                macroLongPressRow[0].setVisibility(trigger == ControlData.MACRO_TRIGGER_LONG_PRESS ? VISIBLE : GONE);
+                macroTapWindowRow[0].setVisibility(trigger == ControlData.MACRO_TRIGGER_DOUBLE_TAP
+                        || trigger == ControlData.MACRO_TRIGGER_TRIPLE_TAP ? VISIBLE : GONE);
+                macroMultiClickRow[0].setVisibility(trigger == ControlData.MACRO_TRIGGER_MULTI_CLICK ? VISIBLE : GONE);
+                macroRapidCpsRow[0].setVisibility(trigger == ControlData.MACRO_TRIGGER_RAPID_CLICK ? VISIBLE : GONE);
+            };
+            triggerSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    updateTriggerRowVisibility.run();
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+            });
+            updateTriggerRowVisibility.run();
+
             addLabel(form, R.string.pojav_controls_macro_actions);
             Spinner countSpinner = new Spinner(activity);
+            String[] countValues = new String[maxActions - 1];
+            for (int i = 0; i < countValues.length; i++) countValues[i] = Integer.toString(i + 2);
             countSpinner.setAdapter(new ArrayAdapter<>(activity,
-                    android.R.layout.simple_spinner_dropdown_item, new String[]{"2", "3", "4"}));
-            countSpinner.setSelection(Math.max(0, Math.min(2, target.data.macroActionCount - 2)));
+                    android.R.layout.simple_spinner_dropdown_item, countValues));
+            countSpinner.setSelection(Math.max(0, Math.min(maxActions - 2, target.data.macroActionCount - 2)));
             form.addView(countSpinner);
             macroCountSpinner[0] = countSpinner;
             int[] actionLabels = new int[]{R.string.pojav_controls_macro_action_1,
                     R.string.pojav_controls_macro_action_2, R.string.pojav_controls_macro_action_3,
-                    R.string.pojav_controls_macro_action_4};
+                    R.string.pojav_controls_macro_action_4, R.string.pojav_controls_macro_action_5,
+                    R.string.pojav_controls_macro_action_6, R.string.pojav_controls_macro_action_7,
+                    R.string.pojav_controls_macro_action_8, R.string.pojav_controls_macro_action_9,
+                    R.string.pojav_controls_macro_action_10};
             int[] delayLabels = new int[]{R.string.pojav_controls_macro_delay_1,
-                    R.string.pojav_controls_macro_delay_2, R.string.pojav_controls_macro_delay_3};
+                    R.string.pojav_controls_macro_delay_2, R.string.pojav_controls_macro_delay_3,
+                    R.string.pojav_controls_macro_delay_4, R.string.pojav_controls_macro_delay_5,
+                    R.string.pojav_controls_macro_delay_6, R.string.pojav_controls_macro_delay_7,
+                    R.string.pojav_controls_macro_delay_8, R.string.pojav_controls_macro_delay_9};
             String[] units = new String[]{activity.getString(R.string.pojav_controls_macro_seconds),
                     activity.getString(R.string.pojav_controls_macro_minutes)};
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < maxActions; i++) {
                 int code = target.data.macroKeycodes == null || target.data.macroKeycodes.length <= i
                         ? KeyMapper.GLFW_KEY_UNKNOWN : target.data.macroKeycodes[i];
                 macroSelectedCodes[i] = new int[]{code};
@@ -599,7 +705,7 @@ final class PojavControlsEditorView extends FrameLayout {
                 actionButton.setOnClickListener(view -> showMappingDialog(
                         macroSelectedCodes[actionIndex], actionButton));
                 row.addView(actionButton);
-                if (i < 3) {
+                if (i < maxActions - 1) {
                     EditText delay = field(row, delayLabels[i], Float.toString(
                             target.data.macroDelayUnits != null && target.data.macroDelayUnits[i] == 1
                                     ? target.data.macroDelayMs[i] / 60000f
@@ -750,9 +856,14 @@ final class PojavControlsEditorView extends FrameLayout {
                     target.data.keycodes = Arrays.copyOf(selectedCodes, 1);
                     if (macroEnabledBox[0] != null) {
                         target.data.macroEnabled = macroEnabledBox[0].isChecked();
+                        target.data.macroTriggerType = macroTriggerSpinner[0].getSelectedItemPosition();
+                        target.data.macroLongPressMs = Math.round(number(macroLongPressField[0], 500f));
+                        target.data.macroTapWindowMs = Math.round(number(macroTapWindowField[0], 300f));
+                        target.data.macroMultiClickCount = Math.round(number(macroMultiClickField[0], 2f));
+                        target.data.macroRapidClickCps = number(macroRapidCpsField[0], 10f);
                         target.data.macroActionCount = macroCountSpinner[0].getSelectedItemPosition() + 2;
-                        for (int i = 0; i < 4; i++) target.data.macroKeycodes[i] = macroSelectedCodes[i][0];
-                        for (int i = 0; i < 3; i++) {
+                        for (int i = 0; i < ControlData.MAX_MACRO_ACTIONS; i++) target.data.macroKeycodes[i] = macroSelectedCodes[i][0];
+                        for (int i = 0; i < ControlData.MAX_MACRO_ACTIONS - 1; i++) {
                             float value = number(macroDelayInputs[i], 0f);
                             boolean minutes = macroDelayUnits[i].getSelectedItemPosition() == 1;
                             target.data.macroDelayUnits[i] = minutes ? 1 : 0;

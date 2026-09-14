@@ -55,6 +55,7 @@ final class PojavControlOverlay extends ViewGroup {
     private boolean virtualPrimaryDown;
     private boolean virtualSecondaryDown;
     private boolean receiverRegistered;
+    private boolean lastMenuOpen;
     private SoundPool clickSoundPool;
     private int clickSoundId;
     private boolean clickSoundLoaded;
@@ -106,8 +107,7 @@ final class PojavControlOverlay extends ViewGroup {
                 profile.virtualMouseFrameDurationMs);
         addView(cursorView);
         clampVirtualCursor();
-        cursorView.setVisibility(virtualMouse ? VISIBLE : GONE);
-        runtimeSurface.setVisibility(virtualMouse || !host.pojavIsMenuOpen() ? VISIBLE : INVISIBLE);
+        cursorView.setVisibility(virtualMouse && host.pojavIsMenuOpen() ? VISIBLE : GONE);
         updateVirtualMouseButtons();
         requestLayout();
         invalidate();
@@ -267,8 +267,7 @@ final class PojavControlOverlay extends ViewGroup {
             clampVirtualCursor();
             host.pojavSendPointer(virtualCursorX, virtualCursorY);
         }
-        cursorView.setVisibility(enabled ? VISIBLE : GONE);
-        runtimeSurface.setVisibility(enabled || !host.pojavIsMenuOpen() ? VISIBLE : INVISIBLE);
+        cursorView.setVisibility(enabled && host.pojavIsMenuOpen() ? VISIBLE : GONE);
         updateVirtualMouseButtons();
         requestLayout();
     }
@@ -464,8 +463,9 @@ final class PojavControlOverlay extends ViewGroup {
 
     private void updateVisibility() {
         boolean menu = host.pojavIsMenuOpen();
-        cursorView.setVisibility(virtualMouse ? VISIBLE : GONE);
-        runtimeSurface.setVisibility(virtualMouse || !host.pojavIsMenuOpen() ? VISIBLE : INVISIBLE);
+        if (lastMenuOpen && !menu) onMenuClosed();
+        lastMenuOpen = menu;
+        cursorView.setVisibility(virtualMouse && menu ? VISIBLE : GONE);
         for (RuntimeButton button : buttons) {
             boolean specialToggle = button.data.keycodes[0] == ControlData.SPECIALBTN_TOGGLECTRL;
             boolean visible = specialToggle || (controlsVisible && button.isVisibleForMode(menu));
@@ -479,6 +479,12 @@ final class PojavControlOverlay extends ViewGroup {
             joystick.setVisibility(visible ? VISIBLE : GONE);
             if (!visible) joystick.release();
         }
+    }
+
+    private void onMenuClosed() {
+        cursorView.setVisibility(GONE);
+        releaseVirtualMouseButtons();
+        runtimeSurface.release();
     }
 
     private void layoutDrawerChild(View child, DrawerPlacement placement, int screenWidth, int screenHeight) {
@@ -694,6 +700,20 @@ final class PojavControlOverlay extends ViewGroup {
         private boolean virtualMouseActive;
         private final Handler macroHandler = new Handler(Looper.getMainLooper());
         private boolean macroRunning;
+        private boolean rapidActive;
+        private int tapPendingCount;
+        private long lastTapAt;
+        private final Runnable longPressRunnable = this::onLongPressFired;
+        private final Runnable tapWindowRunnable = () -> tapPendingCount = 0;
+        private final Runnable rapidRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!rapidActive) return;
+                runMacroSequence(1);
+                float cps = data.macroRapidClickCps <= 0f ? 10f : data.macroRapidClickCps;
+                macroHandler.postDelayed(this, Math.max(16L, Math.round(1000f / cps)));
+            }
+        };
         private float passThroughX;
         private float passThroughY;
 
@@ -730,7 +750,7 @@ final class PojavControlOverlay extends ViewGroup {
                 passThroughY = event.getY();
                 rawPassThrough = data.passThruEnabled && host.pojavIsMenuOpen();
                 if (data.macroEnabled) {
-                    runMacro();
+                    onMacroDown();
                 } else if (!data.isToggle || virtualMouseButton) {
                     press(true);
                 }
@@ -748,13 +768,15 @@ final class PojavControlOverlay extends ViewGroup {
                 }
                 boolean nowOutside = event.getX() < 0 || event.getY() < 0 ||
                         event.getX() > getWidth() || event.getY() > getHeight();
-                if (data.isSwipeable && nowOutside != outside &&
+                if (!data.macroEnabled && data.isSwipeable && nowOutside != outside &&
                         (!data.isToggle || virtualMouseButton)) press(!nowOutside);
                 outside = nowOutside;
                 return true;
             }
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
-                if (!data.macroEnabled) {
+                if (data.macroEnabled) {
+                    onMacroUp(outside);
+                } else {
                     if (data.isToggle && !virtualMouseButton && !outside) {
                         toggled = !toggled;
                         press(toggled);
@@ -767,7 +789,9 @@ final class PojavControlOverlay extends ViewGroup {
                 return true;
             }
             if (action == MotionEvent.ACTION_CANCEL) {
-                if (!data.macroEnabled && (!data.isToggle || virtualMouseButton)) press(false);
+                if (data.macroEnabled) {
+                    onMacroCancel();
+                } else if (!data.isToggle || virtualMouseButton) press(false);
                 outside = false;
                 rawPassThrough = false;
                 if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
@@ -785,6 +809,8 @@ final class PojavControlOverlay extends ViewGroup {
         void release() {
             macroHandler.removeCallbacksAndMessages(null);
             macroRunning = false;
+            rapidActive = false;
+            tapPendingCount = 0;
             if (pressed) send(false);
             pressed = false;
             toggled = false;
@@ -807,24 +833,103 @@ final class PojavControlOverlay extends ViewGroup {
             return height > 0 ? 1.4f * 1080f / height : 1.4f;
         }
 
-        private void runMacro() {
+        private void onMacroDown() {
+            switch (data.macroTriggerType) {
+                case ControlData.MACRO_TRIGGER_LONG_PRESS:
+                    macroHandler.removeCallbacks(longPressRunnable);
+                    macroHandler.postDelayed(longPressRunnable, data.macroLongPressMs);
+                    break;
+                case ControlData.MACRO_TRIGGER_MULTI_CLICK:
+                    runMacroSequence(Math.max(1, data.macroMultiClickCount));
+                    break;
+                case ControlData.MACRO_TRIGGER_RAPID_CLICK:
+                    rapidActive = true;
+                    macroHandler.removeCallbacks(rapidRunnable);
+                    macroHandler.post(rapidRunnable);
+                    break;
+                case ControlData.MACRO_TRIGGER_DOUBLE_TAP:
+                case ControlData.MACRO_TRIGGER_TRIPLE_TAP:
+                    break;
+                default:
+                    runMacroSequence(1);
+                    break;
+            }
+        }
+
+        private void onMacroUp(boolean wasOutside) {
+            switch (data.macroTriggerType) {
+                case ControlData.MACRO_TRIGGER_LONG_PRESS:
+                    macroHandler.removeCallbacks(longPressRunnable);
+                    break;
+                case ControlData.MACRO_TRIGGER_DOUBLE_TAP:
+                    if (!wasOutside) registerTap(2);
+                    break;
+                case ControlData.MACRO_TRIGGER_TRIPLE_TAP:
+                    if (!wasOutside) registerTap(3);
+                    break;
+                case ControlData.MACRO_TRIGGER_RAPID_CLICK:
+                    rapidActive = false;
+                    macroHandler.removeCallbacks(rapidRunnable);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        private void onMacroCancel() {
+            macroHandler.removeCallbacks(longPressRunnable);
+            macroHandler.removeCallbacks(tapWindowRunnable);
+            tapPendingCount = 0;
+            rapidActive = false;
+            macroHandler.removeCallbacks(rapidRunnable);
+        }
+
+        private void onLongPressFired() {
+            runMacroSequence(1);
+        }
+
+        private void registerTap(int requiredTaps) {
+            long now = SystemClock.uptimeMillis();
+            if (tapPendingCount > 0 && now - lastTapAt > data.macroTapWindowMs) tapPendingCount = 0;
+            tapPendingCount++;
+            lastTapAt = now;
+            macroHandler.removeCallbacks(tapWindowRunnable);
+            if (tapPendingCount >= requiredTaps) {
+                tapPendingCount = 0;
+                runMacroSequence(1);
+            } else {
+                macroHandler.postDelayed(tapWindowRunnable, data.macroTapWindowMs);
+            }
+        }
+
+        private void runMacroSequence(int repeats) {
             if (macroRunning) return;
             macroRunning = true;
+            runMacroRepeat(Math.max(1, repeats));
+        }
+
+        private void runMacroRepeat(int remaining) {
             long offset = 0L;
-            int count = Math.max(2, Math.min(4, data.macroActionCount));
+            int count = Math.max(2, Math.min(ControlData.MAX_MACRO_ACTIONS, data.macroActionCount));
             for (int i = 0; i < count; i++) {
                 final int action = i;
-                final long start = offset;
                 macroHandler.postDelayed(() -> {
                     int code = data.macroKeycodes[action];
                     if (code == KeyMapper.GLFW_KEY_UNKNOWN) return;
                     sendCode(code, true);
                     macroHandler.postDelayed(() -> sendCode(code, false), 40L);
-                }, start);
+                }, offset);
                 if (i < count - 1) offset += data.macroDelayMs[i];
             }
-            macroHandler.postDelayed(() -> macroRunning = false, offset + 80L);
+            long finishAt = offset + 80L;
+            int left = remaining - 1;
+            if (left > 0) {
+                macroHandler.postDelayed(() -> runMacroRepeat(left), finishAt + 60L);
+            } else {
+                macroHandler.postDelayed(() -> macroRunning = false, finishAt);
+            }
         }
+
         private void sendCode(int code, boolean down) {
             if (code < 0) specialHandler.handle(code, down);
             else if (code != KeyMapper.GLFW_KEY_UNKNOWN) {
