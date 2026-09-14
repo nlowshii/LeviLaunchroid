@@ -84,6 +84,28 @@ final class PojavControlOverlay extends ViewGroup {
         reloadProfile();
     }
 
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        post(() -> {
+            bringToFront();
+            if (virtualMouse) {
+                ensureVirtualCursorInitialized();
+                updateVirtualCursorPosition();
+            }
+            updateVisibility();
+        });
+    }
+
+    @Override
+    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight);
+        if (width > 0 && height > 0 && virtualMouse) {
+            ensureVirtualCursorInitialized();
+            post(this::updateVirtualCursorPosition);
+        }
+    }
+
     void reloadProfile() {
         releaseAll();
         removeAllViews();
@@ -255,18 +277,23 @@ final class PojavControlOverlay extends ViewGroup {
     }
 
     private void setVirtualMouse(boolean enabled) {
-        if (virtualMouse == enabled) return;
+        if (virtualMouse == enabled) {
+            if (enabled) {
+                ensureVirtualCursorInitialized();
+                updateVirtualCursorPosition();
+                bringToFront();
+            }
+            return;
+        }
         runtimeSurface.release();
         releaseVirtualMouseButtons();
         virtualMouse = enabled;
         if (enabled) {
-            if (Float.isNaN(virtualCursorX) || Float.isNaN(virtualCursorY)) {
-                virtualCursorX = getWidth() / 2f;
-                virtualCursorY = getHeight() / 2f;
-            }
+            ensureVirtualCursorInitialized();
             clampVirtualCursor();
             host.pojavSendPointer(virtualCursorX, virtualCursorY);
             PaperDollBridge.updateCursor(virtualCursorX, virtualCursorY);
+            bringToFront();
         }
         cursorView.setVisibility(enabled && host.pojavIsMenuOpen() ? VISIBLE : GONE);
         updateVirtualMouseButtons();
@@ -274,10 +301,7 @@ final class PojavControlOverlay extends ViewGroup {
     }
 
     private void moveVirtualCursor(float deltaX, float deltaY) {
-        if (Float.isNaN(virtualCursorX) || Float.isNaN(virtualCursorY)) {
-            virtualCursorX = getWidth() / 2f;
-            virtualCursorY = getHeight() / 2f;
-        }
+        ensureVirtualCursorInitialized();
         virtualCursorX += deltaX;
         virtualCursorY += deltaY;
         updateVirtualCursorPosition();
@@ -287,6 +311,14 @@ final class PojavControlOverlay extends ViewGroup {
         virtualCursorX = x;
         virtualCursorY = y;
         updateVirtualCursorPosition();
+    }
+
+    private void ensureVirtualCursorInitialized() {
+        if (getWidth() <= 0 || getHeight() <= 0) return;
+        if (Float.isNaN(virtualCursorX) || Float.isNaN(virtualCursorY)) {
+            virtualCursorX = getWidth() / 2f;
+            virtualCursorY = getHeight() / 2f;
+        }
     }
 
     private void updateVirtualCursorPosition() {

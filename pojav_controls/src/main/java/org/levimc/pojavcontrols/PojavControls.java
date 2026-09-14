@@ -54,6 +54,7 @@ public final class PojavControls {
         if (overlay != null && current == activity && overlay.isAttachedToWindow()) {
             overlay.reloadProfile();
             overlay.bringToFront();
+            overlay.post(overlay::bringToFront);
             return;
         }
         detach();
@@ -63,6 +64,8 @@ public final class PojavControls {
         ((ViewGroup) content).addView(overlay, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         overlay.bringToFront();
+        overlay.post(overlay::bringToFront);
+        overlay.postDelayed(overlay::bringToFront, 250L);
         attachedActivity = new WeakReference<>(activity);
     }
 

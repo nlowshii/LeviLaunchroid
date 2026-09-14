@@ -123,7 +123,6 @@ public class InbuiltOverlayManager {
         modMenuButton = new ModMenuButton(activity);
         modMenuButton.show(START_X, nextY);
         refreshExternalButtons();
-        refreshRuntimeVisibility();
     }
 
     private void restorePersistedInbuiltModState(InbuiltModManager manager, String modId) {
@@ -177,7 +176,7 @@ public class InbuiltOverlayManager {
                 modOverlayMap.put(modId, hud);
                 break;
             case ModIds.AUTO_SPRINT:
-                AutoSprintOverlay sprint = new AutoSprintOverlay(activity);
+                AutoSprintOverlay sprint = new AutoSprintOverlay(activity, manager.getAutoSprintKeybind());
                 sprint.show(savedX, savedY);
                 overlays.add(sprint);
                 modOverlayMap.put(modId, sprint);
@@ -714,12 +713,12 @@ public class InbuiltOverlayManager {
             if (active) {
                 modMenuButton.setVisibility(android.view.View.GONE);
             } else {
+                modMenuButton.setVisibility(android.view.View.VISIBLE);
                 int savedX = InbuiltModManager.getInstance(activity).getOverlayPositionX(ModIds.MOD_MENU, START_X);
                 int savedY = InbuiltModManager.getInstance(activity).getOverlayPositionY(ModIds.MOD_MENU, baseY);
                 modMenuButton.show(savedX, savedY);
             }
         }
-        refreshRuntimeVisibility();
 
         if (active) {
             selectFirstHudEditorOverlay();
@@ -858,57 +857,39 @@ public class InbuiltOverlayManager {
             cpsDisplayOverlay.updatePosition(centerX, centerY);
         }
         
-        java.util.Set<String> explicitHudModules = new java.util.HashSet<>();
-        ExternalModBridge.HudEditorElement[] hudElements = ExternalModBridge.getHudEditorElements();
-        if (hudElements != null) {
-            for (ExternalModBridge.HudEditorElement element : hudElements) {
-                if (element == null || element.moduleId == null || element.positionKeyX == null || element.positionKeyY == null) continue;
-                explicitHudModules.add(element.moduleId);
-                float elementX = metrics.widthPixels * 0.5f - Math.max(1f, element.width) * 0.5f;
-                float elementY = metrics.heightPixels * 0.5f - Math.max(1f, element.height) * 0.5f;
-                ExternalModBridge.setExternalModConfig(element.moduleId, element.positionKeyX, String.valueOf(elementX));
-                ExternalModBridge.setExternalModConfig(element.moduleId, element.positionKeyY, String.valueOf(elementY));
-            }
-        }
-
-        ExternalModBridge.DrawCommand[] cmds = ExternalModBridge.getDrawCommands();
+        org.levimc.launcher.core.mods.inbuilt.ExternalModBridge.DrawCommand[] cmds = org.levimc.launcher.core.mods.inbuilt.ExternalModBridge.getDrawCommands();
         if (cmds != null) {
             java.util.Set<String> processed = new java.util.HashSet<>();
-            for (ExternalModBridge.DrawCommand cmd : cmds) {
-                if (cmd.moduleId != null && !explicitHudModules.contains(cmd.moduleId) && processed.add(cmd.moduleId)) {
-                    ExternalModBridge.setExternalModConfig(cmd.moduleId, "hudPosX", String.valueOf(centerX));
-                    ExternalModBridge.setExternalModConfig(cmd.moduleId, "hudPosY", String.valueOf(centerY));
+            for (org.levimc.launcher.core.mods.inbuilt.ExternalModBridge.DrawCommand cmd : cmds) {
+                if (cmd.moduleId != null && !processed.contains(cmd.moduleId)) {
+                    processed.add(cmd.moduleId);
+                    org.levimc.launcher.core.mods.inbuilt.ExternalModBridge.setExternalModConfig(cmd.moduleId, "hudPosX", String.valueOf(centerX));
+                    org.levimc.launcher.core.mods.inbuilt.ExternalModBridge.setExternalModConfig(cmd.moduleId, "hudPosY", String.valueOf(centerY));
                 }
             }
         }
     }
 
-    public void refreshRuntimeVisibility() {
-        lastVisibilityStateHash = Long.MIN_VALUE;
-        tick();
-    }
-
     public void tick() {
+        for (BaseOverlayButton overlay : overlays) {
+            overlay.tick();
+        }
+
         InbuiltModManager manager = InbuiltModManager.getInstance(activity);
         boolean isPauseOnly = manager.isPauseMenuOnly();
+        boolean forceGlobalModMenu = org.levimc.launcher.preloader.PreloaderInput.shouldForceGlobalModMenu();
         boolean isPauseOpen = org.levimc.launcher.preloader.PreloaderInput.isPauseMenuOpen();
         boolean isHudScreenOpen = org.levimc.launcher.preloader.PreloaderInput.isHudScreenOpen();
         boolean isShowingMenu = org.levimc.launcher.preloader.PreloaderInput.isShowingMenu();
-        boolean showGameOverlays = isHudScreenOpen && !isShowingMenu && !isPauseOpen;
+        boolean showGameOverlays = forceGlobalModMenu || (isHudScreenOpen && !isShowingMenu);
         boolean inbuiltVisible = hudEditorMode || showGameOverlays;
         boolean hotbarVisible = inbuiltVisible || manager.isOverlayShowEverywhere(ModIds.HOTBAR_SLOT);
-
-        for (BaseOverlayButton overlay : overlays) {
-            if (inbuiltVisible || manager.isOverlayShowEverywhere(overlay.getOverlayConfigKey())) {
-                overlay.tick();
-            }
-        }
         for (HotbarSlotOverlay hotbar : hotbarSlotOverlayMap.values()) {
             hotbar.setRenderVisible(hotbarVisible);
         }
-
         long stateHash = manager.getOverlayVisibilityRevision();
         stateHash = 31L * stateHash + (isPauseOnly ? 1L : 0L);
+        stateHash = 31L * stateHash + (forceGlobalModMenu ? 1L : 0L);
         stateHash = 31L * stateHash + (isPauseOpen ? 1L : 0L);
         stateHash = 31L * stateHash + (isHudScreenOpen ? 1L : 0L);
         stateHash = 31L * stateHash + (isShowingMenu ? 1L : 0L);
@@ -919,7 +900,6 @@ public class InbuiltOverlayManager {
         }
         stateHash = 31L * stateHash + (fpsDisplayOverlay == null ? 0L : System.identityHashCode(fpsDisplayOverlay));
         stateHash = 31L * stateHash + (cpsDisplayOverlay == null ? 0L : System.identityHashCode(cpsDisplayOverlay));
-        stateHash = 31L * stateHash + (chickPetOverlay == null ? 0L : System.identityHashCode(chickPetOverlay));
         stateHash = 31L * stateHash + (modMenuButton == null ? 0L : System.identityHashCode(modMenuButton));
         stateHash = 31L * stateHash + (hudOverlay == null ? 0L : System.identityHashCode(hudOverlay));
         if (stateHash == lastVisibilityStateHash) return;
@@ -927,12 +907,9 @@ public class InbuiltOverlayManager {
 
         activity.runOnUiThread(() -> {
             if (modMenuButton != null) {
-                int visibility = !hudEditorMode && (!isPauseOnly || (isPauseOpen && isShowingMenu))
-                        ? android.view.View.VISIBLE
-                        : android.view.View.GONE;
-                modMenuButton.setVisibility(visibility);
-                if (!hudEditorMode && visibility == android.view.View.GONE && modMenuButton.isMenuShowing()) {
-                    modMenuButton.hideMenu();
+                boolean menuOpen = modMenuButton.isMenuShowing();
+                if (!isPauseOnly || forceGlobalModMenu || isPauseOpen || menuOpen) {
+                    modMenuButton.setVisibility(android.view.View.VISIBLE);
                 }
             }
 
@@ -954,13 +931,6 @@ public class InbuiltOverlayManager {
                         overlay.overlayView.setVisibility(visibility);
                     }
                 }
-            }
-
-            if (chickPetOverlay != null) {
-                int visibility = inbuiltVisible || manager.isOverlayShowEverywhere(ModIds.CHICK_PET)
-                        ? android.view.View.VISIBLE
-                        : android.view.View.GONE;
-                chickPetOverlay.setVisibility(visibility);
             }
 
             if (fpsDisplayOverlay != null) {
