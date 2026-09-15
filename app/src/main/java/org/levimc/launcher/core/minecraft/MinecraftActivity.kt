@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.res.AssetManager
 import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.view.InputDevice
@@ -409,6 +410,30 @@ class MinecraftActivity : MainActivity(), PojavControlsHost {
 
     override fun pojavSendPointer(x: Float, y: Float) {
         PojavControlsMod.nativeSendPointer(x, y)
+        dispatchVirtualMouseHover(x, y)
+    }
+
+    private fun dispatchVirtualMouseHover(x: Float, y: Float) {
+        val now = SystemClock.uptimeMillis()
+        val properties = arrayOf(MotionEvent.PointerProperties().apply {
+            id = 0
+            toolType = MotionEvent.TOOL_TYPE_MOUSE
+        })
+        val coords = arrayOf(MotionEvent.PointerCoords().apply {
+            this.x = x
+            this.y = y
+            pressure = 0f
+            size = 0f
+        })
+        val event = MotionEvent.obtain(
+            now, now, MotionEvent.ACTION_HOVER_MOVE, 1, properties, coords,
+            0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
+        )
+        try {
+            dispatchGenericMotionEventToGame(event)
+        } finally {
+            event.recycle()
+        }
     }
 
     override fun pojavSendTouch(event: MotionEvent): Boolean {
